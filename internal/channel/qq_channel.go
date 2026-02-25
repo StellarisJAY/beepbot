@@ -1,0 +1,155 @@
+package channel
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/StellarisJAY/beepbot/internal/config"
+
+	"github.com/tencent-connect/botgo"
+	"github.com/tencent-connect/botgo/dto"
+	"github.com/tencent-connect/botgo/event"
+	"github.com/tencent-connect/botgo/openapi"
+	"github.com/tencent-connect/botgo/token"
+	"golang.org/x/oauth2"
+)
+
+type QQBotChannel struct {
+	BaseChannel
+	config config.Config
+
+	tokenSource    oauth2.TokenSource
+	api            openapi.OpenAPI
+	sessionManager botgo.SessionManager
+
+	cancel context.CancelFunc
+}
+
+func NewQQBotChannel(config config.Config, bus *MessageBus) Channel {
+	return &QQBotChannel{
+		BaseChannel: NewBaseChannel("qq", bus),
+		config:      config,
+	}
+}
+
+func (c *QQBotChannel) Start(ctx context.Context) error {
+	config := c.config.ChannelConfig.QQ
+	if config.AppID == "" || config.AppSecret == "" {
+		return errors.New("must provide AppID and AppSecret")
+	}
+	// 创建机器人token
+	c.tokenSource = token.NewQQBotTokenSource(&token.QQBotCredentials{
+		AppID:     config.AppID,
+		AppSecret: config.AppSecret,
+	})
+
+	ctx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+
+	// 启动token刷新
+	if err := token.StartRefreshAccessToken(ctx, c.tokenSource); err != nil {
+		return fmt.Errorf("start qq channel failed, start refresh token error: %w", err)
+	}
+
+	c.api = botgo.NewOpenAPI(config.AppID, c.tokenSource)
+
+	// 注册消息回调
+	intent := event.RegisterHandlers(
+		c.CreateC2CMessageHandler(ctx),
+		c.CreateGroupMessageHandler(ctx),
+	)
+
+	// 创建websocket连接
+	ws, err := c.api.WS(ctx, map[string]string{}, "")
+	if err != nil {
+		return fmt.Errorf("start qq channel failed, create ws error: %w", err)
+	}
+
+	// 启动会话管理器，单独创建一个goroutine避免阻塞
+	c.sessionManager = botgo.NewSessionManager()
+	go func() {
+		if err := c.sessionManager.Start(ws, c.tokenSource, &intent); err != nil {
+			slog.Error("start qq channel failed, start session error", "error", err)
+		}
+		c.available = false
+	}()
+	c.available = true
+
+	slog.Info("qq bot channel started")
+	return nil
+}
+
+func (c *QQBotChannel) Stop() {
+	slog.Info("stopping qq bot channel")
+	c.available = false
+	if c.cancel != nil {
+		c.cancel()
+	}
+}
+
+func (c *QQBotChannel) Send(ctx context.Context, message OutboundMessage) error {
+	if !c.IsAvailable() {
+		return errors.New("qq bot channel is not available")
+	}
+	msgToCreate := &dto.MessageToCreate{}
+	switch message.MessageType {
+	case MarkdownMsg:
+		msgToCreate.MsgType = dto.MarkdownMsg
+		msgToCreate.Markdown = &dto.Markdown{
+			Content: message.Content,
+		}
+	case TextMessage:
+		msgToCreate.MsgType = dto.TextMsg
+		msgToCreate.Content = message.Content
+	default:
+		msgToCreate.MsgType = dto.TextMsg
+		msgToCreate.Content = message.Content
+	}
+	_, err := c.api.PostC2CMessage(ctx, message.UserID, msgToCreate)
+	if err != nil {
+		return fmt.Errorf("send qq message failed, post c2c message error: %w", err)
+	}
+	return nil
+}
+
+func (c *QQBotChannel) CreateC2CMessageHandler(ctx context.Context) event.C2CMessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
+		if data.Author == nil || data.Author.ID == "" {
+			return errors.New("received message with no sender ID")
+		}
+		senderID := data.Author.ID
+		if data.Content == "" {
+			return errors.New("received message with empty content")
+		}
+		message := InboundMessage{
+			Channel:    c.ID(),
+			UserID:     senderID,
+			SessionKey: event.Session.ID,
+			Content:    data.Content,
+		}
+		if err := c.BaseChannel.HandleMessage(ctx, message); err != nil {
+			return fmt.Errorf("handle qq message failed, handle message error: %w", err)
+		}
+		return nil
+	}
+}
+
+func (c *QQBotChannel) CreateGroupMessageHandler(ctx context.Context) event.GroupATMessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error {
+		return nil
+	}
+}
+
+func (c *QQBotChannel) ID() string {
+	return c.BaseChannel.ID()
+}
+
+func (c *QQBotChannel) IsAllowed(senderID string) bool {
+	return true
+}
+
+func (c *QQBotChannel) IsAvailable() bool {
+	return c.BaseChannel.IsAvailable()
+}

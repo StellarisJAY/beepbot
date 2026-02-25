@@ -1,0 +1,28 @@
+{
+  "providers": {
+    "dashscope": {
+      "api_key": "your api key",
+      "base_url": "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"
+    }
+  },
+  "agent": {
+    "provider": "dashscope",
+    "model": "qwen3.5-plus",
+    "temperature": 0.2,
+    "max_tool_iterations": 50,
+    "max_tokens": 4096,
+    "system_prompt": "You are a helpful assistant.",
+    "working_dir": "D:/data/beepbot"
+  },
+  "memory": {
+    "window_size": 20,
+    "flash": {}
+  },
+  "channel": {
+    "console": {},
+    "qq": {
+      "app_id": "your_app_id",
+      "app_secret": "your_app_secret"
+    }
+  }
+}
