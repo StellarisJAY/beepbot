@@ -39,6 +39,7 @@ func (c *QQBotChannel) Start(ctx context.Context) error {
 	if config.AppID == "" || config.AppSecret == "" {
 		return errors.New("must provide AppID and AppSecret")
 	}
+
 	// 创建机器人token
 	c.tokenSource = token.NewQQBotTokenSource(&token.QQBotCredentials{
 		AppID:     config.AppID,

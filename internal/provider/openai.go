@@ -30,7 +30,6 @@ func NewOpenAIProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
 }
 
 func (d *OpenAIProvider) Chat(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*types.LLMResponse, error) {
-	slog.Info("configs", "baseURL", d.baseURL, "apiKey", d.apiKey, "model", model, "messages", messages)
 	params := buildOpenAIResponsesParams(messages, model, options)
 	result, err := d.client.Responses.New(ctx, params)
 	if err != nil {

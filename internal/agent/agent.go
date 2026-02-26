@@ -138,7 +138,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			slog.Error("model api error", "iteration", iterations, "error", err)
 			continue
 		}
-		slog.Info("response from model", "content", response.Content, "usage", response.Usage, "tool_calls", response.ToolCalls)
+		slog.Debug("response from model", "content", response.Content, "usage", response.Usage, "tool_calls", response.ToolCalls)
 
 		// 没有工具调用，直接返回消息
 		if len(response.ToolCalls) == 0 {
@@ -187,6 +187,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 					Content:    err.Error(),
 					ToolCallID: tc.ID,
 				}
+				slog.Debug("Tool call error", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "error", err)
 				session.AppendMessage(toolMessage)
 				continue
 			}
@@ -196,6 +197,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				Content:    result,
 				ToolCallID: tc.ID,
 			}
+			slog.Debug("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "result", result)
 			// 发布一条工具调用成功消息给用户，让用户知道智能体的执行过程
 			a.publishToolCallMessage(ctx, message.Channel, message.UserID, tc, result)
 			// 添加工具调用结果到会话

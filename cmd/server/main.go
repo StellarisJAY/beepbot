@@ -6,12 +6,15 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/StellarisJAY/beepbot/internal/agent"
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/db"
+	"github.com/StellarisJAY/beepbot/internal/logger"
 )
 
 var (
@@ -22,6 +25,24 @@ func init() {
 	flag.StringVar(&configFile, "config", "config.json", "Path to the config file")
 }
 
+func ensureWorkingDir(config *config.Config) error {
+	workingDir := config.AgentConfig.WorkingDir
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		workingDir = "./beepbot"
+	}
+	workingDirAbs, err := filepath.Abs(workingDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(workingDirAbs, os.ModeDir); err != nil {
+		return err
+	}
+	config.AgentConfig.WorkingDir = workingDirAbs
+	slog.Info("Created working directory", "path", workingDirAbs)
+	return nil
+}
+
 func main() {
 	flag.Parse()
 	// 加载配置文件
@@ -30,10 +51,16 @@ func main() {
 		panic(err)
 	}
 
+	// 初始化日志
+	logger.InitLogger(config.Logging)
+
 	// 初始化数据库
 	if err := db.InitDatabase(*config); err != nil {
 		panic(err)
 	}
+
+	// 创建工作目录
+	ensureWorkingDir(config)
 
 	// 监听系统信号
 	ctx, cancel := context.WithCancel(context.Background())

@@ -12,6 +12,7 @@ type Config struct {
 	AgentConfig     AgentConfig     `json:"agent"`
 	MemoryConfig    MemoryConfig    `json:"memory"`
 	ChannelConfig   ChannelConfig   `json:"channel"`
+	Logging         Logging         `json:"logging"`
 }
 
 type ProvidersConfig struct {
@@ -59,6 +60,12 @@ type ConsoleChannelConfig struct {
 type QQChannelConfig struct {
 	AppID     string `json:"app_id"`
 	AppSecret string `json:"app_secret"`
+}
+
+type Logging struct {
+	Level  string `json:"level"`
+	File   string `json:"file"`
+	Format string `json:"format"`
 }
 
 func FromConfigFile(path string) (*Config, error) {
