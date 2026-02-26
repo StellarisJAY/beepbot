@@ -13,6 +13,7 @@ type Config struct {
 	MemoryConfig    MemoryConfig    `json:"memory"`
 	ChannelConfig   ChannelConfig   `json:"channel"`
 	Logging         Logging         `json:"logging"`
+	BuiltinTools    BuiltinTools    `json:"builtin_tools"`
 }
 
 type ProvidersConfig struct {
@@ -66,6 +67,16 @@ type Logging struct {
 	Level  string `json:"level"`
 	File   string `json:"file"`
 	Format string `json:"format"`
+}
+
+type BuiltinTools struct {
+	Shell ShellTool `json:"shell"`
+}
+
+type ShellTool struct {
+	Enable            bool     `json:"enable"`
+	ForbiddenCommands []string `json:"forbidden_commands"`
+	Timeout           string   `json:"timeout"`
 }
 
 func FromConfigFile(path string) (*Config, error) {

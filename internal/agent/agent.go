@@ -35,12 +35,15 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	}
 	// 注册工具
 	toolRegistry := tool.NewToolRegistry()
-	toolRegistry.Register(&tool.TimeTool{})
 	// 文件系统工具需要传入工作目录，实现访问隔离
 	workingDir := config.AgentConfig.WorkingDir
 	toolRegistry.Register(tool.NewListDirTool(workingDir))
 	toolRegistry.Register(tool.NewReadFileTool(workingDir))
 	toolRegistry.Register(tool.NewWriteFileTool(workingDir))
+	// shell 工具
+	if config.BuiltinTools.Shell.Enable {
+		toolRegistry.Register(tool.NewShellTool(config))
+	}
 
 	// 会话管理器，管理不同会话的消息缓存和长期记忆
 	sessionManager := session.NewSessionManager(config)
@@ -67,9 +70,13 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			slog.Info("receive message", "channel", message.Channel, "user", message.UserID, "content", message.Content)
-			// 找到消息所属会话，没有则新建会话
-			sessionKey := session.GetSessionKey(message.Channel, message.UserID)
+			var sessionKey string
+			if message.GroupID != "" {
+				slog.Info("receive group message", "channel", message.Channel, "group", message.GroupID, "userID", message.UserID, "content", message.Content)
+			} else {
+				slog.Info("receive private message", "channel", message.Channel, "user", message.UserID, "content", message.Content)
+			}
+			sessionKey = session.GetSessionKey(message.Channel, message.GroupID, message.UserID)
 			session := a.sessionManager.GetOrCreateSession(sessionKey)
 			// 创建智能体循环gorountine处理消息
 			go a.agentLoop(ctx, session, message)
@@ -79,20 +86,12 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 
 func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, message channel.InboundMessage) {
 	model := a.config.AgentConfig.Model
-	channelName, userID := message.Channel, message.UserID
+	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.config.AgentConfig.MaxToolIterations
 
 	if maxIterations == 0 {
 		maxIterations = 50
 	}
-
-	// 先发一条消息让用户知道机器人的状态
-	a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-		Channel:     channelName,
-		UserID:      userID,
-		Content:     "机器人正在处理，请稍候...",
-		MessageType: channel.TextMessage,
-	})
 
 	options := types.ChatOptions{}
 
@@ -147,10 +146,12 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				Content: response.Content,
 			})
 			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-				Channel:     channelName,
-				UserID:      userID,
-				Content:     response.Content,
-				MessageType: channel.MarkdownMsg,
+				Channel:          channelName,
+				UserID:           userID,
+				GroupID:          groupID,
+				Content:          response.Content,
+				MessageType:      channel.MarkdownMsg,
+				InboundMessageID: inboundMsgID,
 			})
 			return
 		}
@@ -198,8 +199,6 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				ToolCallID: tc.ID,
 			}
 			slog.Debug("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "result", result)
-			// 发布一条工具调用成功消息给用户，让用户知道智能体的执行过程
-			a.publishToolCallMessage(ctx, message.Channel, message.UserID, tc, result)
 			// 添加工具调用结果到会话
 			session.AppendMessage(toolMessage)
 		}

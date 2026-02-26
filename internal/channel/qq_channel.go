@@ -94,7 +94,9 @@ func (c *QQBotChannel) Send(ctx context.Context, message OutboundMessage) error 
 	if !c.IsAvailable() {
 		return errors.New("qq bot channel is not available")
 	}
-	msgToCreate := &dto.MessageToCreate{}
+	msgToCreate := &dto.MessageToCreate{
+		MsgID: message.InboundMessageID,
+	}
 	switch message.MessageType {
 	case MarkdownMsg:
 		msgToCreate.MsgType = dto.MarkdownMsg
@@ -108,7 +110,13 @@ func (c *QQBotChannel) Send(ctx context.Context, message OutboundMessage) error 
 		msgToCreate.MsgType = dto.TextMsg
 		msgToCreate.Content = message.Content
 	}
-	_, err := c.api.PostC2CMessage(ctx, message.UserID, msgToCreate)
+
+	var err error
+	if message.GroupID != "" {
+		_, err = c.api.PostGroupMessage(ctx, message.GroupID, msgToCreate)
+	} else {
+		_, err = c.api.PostC2CMessage(ctx, message.UserID, msgToCreate)
+	}
 	if err != nil {
 		return fmt.Errorf("send qq message failed, post c2c message error: %w", err)
 	}
@@ -124,11 +132,12 @@ func (c *QQBotChannel) CreateC2CMessageHandler(ctx context.Context) event.C2CMes
 		if data.Content == "" {
 			return errors.New("received message with empty content")
 		}
+		slog.Debug("receive QQ c2c message", "userID", senderID)
 		message := InboundMessage{
-			Channel:    c.ID(),
-			UserID:     senderID,
-			SessionKey: event.Session.ID,
-			Content:    data.Content,
+			Channel:   c.ID(),
+			UserID:    senderID,
+			Content:   data.Content,
+			MessageID: data.ID,
 		}
 		if err := c.BaseChannel.HandleMessage(ctx, message); err != nil {
 			return fmt.Errorf("handle qq message failed, handle message error: %w", err)
@@ -139,6 +148,19 @@ func (c *QQBotChannel) CreateC2CMessageHandler(ctx context.Context) event.C2CMes
 
 func (c *QQBotChannel) CreateGroupMessageHandler(ctx context.Context) event.GroupATMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error {
+		senderID := data.Author.ID
+		groupID := data.GroupID
+		slog.Debug("receive QQ Group @beepbot", "groupID", groupID, "senderID", senderID)
+		message := InboundMessage{
+			Channel:   c.ID(),
+			GroupID:   groupID,
+			UserID:    senderID,
+			Content:   data.Content,
+			MessageID: data.ID,
+		}
+		if err := c.BaseChannel.HandleMessage(ctx, message); err != nil {
+			return fmt.Errorf("handle qq group message failed, error: %w", err)
+		}
 		return nil
 	}
 }

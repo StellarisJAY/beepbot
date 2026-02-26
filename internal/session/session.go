@@ -58,6 +58,6 @@ func (s *Session) GetSummary() string {
 	return s.Summary
 }
 
-func GetSessionKey(channelID string, userID string) string {
-	return fmt.Sprintf("%s:%s", channelID, userID)
+func GetSessionKey(channelID string, groupID string, userID string) string {
+	return fmt.Sprintf("%s:%s:%s", channelID, groupID, userID)
 }

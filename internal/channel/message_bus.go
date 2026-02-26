@@ -12,16 +12,21 @@ const (
 type InboundMessage struct {
 	Channel    string
 	UserID     string
+	GroupID    string
+	MessageID  string
 	SessionKey string
 	Content    string
 }
 
 type OutboundMessage struct {
-	Channel     string
-	UserID      string
-	Content     string
-	File        string
-	MessageType MessageType
+	Channel          string
+	UserID           string
+	GroupID          string
+	Content          string
+	File             string
+	InboundMessageID string
+	MessageType      MessageType
+	Iteration        int
 }
 
 type MessageBus struct {

@@ -24,5 +24,17 @@
       "app_id": "your_app_id",
       "app_secret": "your_app_secret"
     }
+  },
+  "logging": {
+    "level": "info",
+    "file": "",
+    "format": "json"
+  },
+  "builtin_tools": {
+    "shell": {
+      "enable": true,
+      "forbidden_commands": ["sudo", "su", "rm", "chmod", "chown"],
+      "timeout": "30s"
+    }
   }
 }
