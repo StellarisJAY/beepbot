@@ -9,13 +9,44 @@ import (
 	"strings"
 )
 
-// ReadFileTool 读取文件内容工具
-type ReadFileTool struct {
+// fileSystemTool 文件系统工具的公共基础结构
+type fileSystemTool struct {
 	workingDir string
 }
 
+// resolvePath 将相对路径解析为工作目录内的绝对路径，防止路径遍历
+func (f *fileSystemTool) resolvePath(path string) (string, error) {
+	// 清理路径，移除前缀的 / 或 ./
+	cleanPath := strings.TrimPrefix(path, "/")
+	cleanPath = strings.TrimPrefix(cleanPath, "./")
+
+	// 与工作目录拼接
+	fullPath := filepath.Join(f.workingDir, cleanPath)
+
+	// 转换为绝对路径并清理（解析 ..）
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	// 安全检查：确保解析后的路径仍在工作目录内
+	if !strings.HasPrefix(absPath, f.workingDir) {
+		return "", fmt.Errorf("access denied: path %q attempts to escape working directory", path)
+	}
+
+	return absPath, nil
+}
+
+// ReadFileTool 读取文件内容工具
+type ReadFileTool struct {
+	fileSystemTool
+}
+
 func NewReadFileTool(workingDir string) *ReadFileTool {
-	return &ReadFileTool{workingDir: workingDir}
+	workingDirAbs, _ := filepath.Abs(workingDir)
+	return &ReadFileTool{
+		fileSystemTool: fileSystemTool{workingDir: workingDirAbs},
+	}
 }
 
 func (r *ReadFileTool) Name() string {
@@ -59,37 +90,15 @@ func (r *ReadFileTool) Execute(ctx context.Context, params map[string]any) (stri
 	return string(data), nil
 }
 
-// resolvePath 将相对路径解析为工作目录内的绝对路径，防止路径遍历
-func (r *ReadFileTool) resolvePath(path string) (string, error) {
-	// 清理路径，移除前缀的 / 或 ./
-	cleanPath := strings.TrimPrefix(path, "/")
-	cleanPath = strings.TrimPrefix(cleanPath, "./")
-
-	// 与工作目录拼接
-	fullPath := filepath.Join(r.workingDir, cleanPath)
-
-	// 转换为绝对路径并清理（解析 ..）
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-
-	// 安全检查：确保解析后的路径仍在工作目录内
-	// 这可以防止通过 ../ 进行路径遍历攻击
-	if !strings.HasPrefix(absPath, r.workingDir) {
-		return "", fmt.Errorf("access denied: path %q attempts to escape working directory", path)
-	}
-
-	return absPath, nil
-}
-
 // ListDirTool 列出目录内容工具
 type ListDirTool struct {
-	workingDir string
+	fileSystemTool
 }
 
 func NewListDirTool(workingDir string) *ListDirTool {
-	return &ListDirTool{workingDir: workingDir}
+	return &ListDirTool{
+		fileSystemTool: fileSystemTool{workingDir: workingDir},
+	}
 }
 
 func (r *ListDirTool) Name() string {
@@ -132,28 +141,15 @@ func (r *ListDirTool) Execute(ctx context.Context, params map[string]any) (strin
 	return result.String(), nil
 }
 
-// resolvePath 将相对路径解析为工作目录内的绝对路径
-func (r *ListDirTool) resolvePath(path string) (string, error) {
-	cleanPath := strings.TrimPrefix(path, "/")
-	cleanPath = strings.TrimPrefix(cleanPath, "./")
-	fullPath := filepath.Join(r.workingDir, cleanPath)
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-	if !strings.HasPrefix(absPath, r.workingDir) {
-		return "", fmt.Errorf("access denied: path %q attempts to escape working directory", path)
-	}
-	return absPath, nil
-}
-
 // WriteFileTool 写入文件内容工具
 type WriteFileTool struct {
-	workingDir string
+	fileSystemTool
 }
 
 func NewWriteFileTool(workingDir string) *WriteFileTool {
-	return &WriteFileTool{workingDir: workingDir}
+	return &WriteFileTool{
+		fileSystemTool: fileSystemTool{workingDir: workingDir},
+	}
 }
 
 func (r *WriteFileTool) Name() string {
@@ -199,19 +195,4 @@ func (r *WriteFileTool) Execute(ctx context.Context, params map[string]any) (str
 		return "", err
 	}
 	return "write success", nil
-}
-
-// resolvePath 将相对路径解析为工作目录内的绝对路径
-func (r *WriteFileTool) resolvePath(path string) (string, error) {
-	cleanPath := strings.TrimPrefix(path, "/")
-	cleanPath = strings.TrimPrefix(cleanPath, "./")
-	fullPath := filepath.Join(r.workingDir, cleanPath)
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-	if !strings.HasPrefix(absPath, r.workingDir) {
-		return "", fmt.Errorf("access denied: path %q attempts to escape working directory", path)
-	}
-	return absPath, nil
 }
