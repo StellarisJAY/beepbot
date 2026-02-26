@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/StellarisJAY/beepbot/internal/config"
 
@@ -97,6 +98,10 @@ func (c *QQBotChannel) Send(ctx context.Context, message OutboundMessage) error 
 	msgToCreate := &dto.MessageToCreate{
 		MsgID: message.InboundMessageID,
 	}
+
+	// 替换 . 防止qq把文件名识别成url拦截
+	message.Content = strings.ReplaceAll(message.Content, ".", "·")
+
 	switch message.MessageType {
 	case MarkdownMsg:
 		msgToCreate.MsgType = dto.MarkdownMsg
