@@ -65,6 +65,9 @@ func (c *ChannelManager) DispatchOutbound(ctx context.Context) {
 }
 
 func (c *ChannelManager) InitChannels(ctx context.Context, config config.ChannelConfig) error {
+	// 注册系统消息通道
+	c.channels["system"] = newSystemChannel()
+	// qq机器人消息通道
 	if config.QQ != nil {
 		qqBotChannel := NewQQBotChannel(c.config, c.bus)
 		c.channels[qqBotChannel.ID()] = qqBotChannel

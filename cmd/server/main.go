@@ -14,6 +14,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/db"
+	"github.com/StellarisJAY/beepbot/internal/heartbeat"
 	"github.com/StellarisJAY/beepbot/internal/logger"
 )
 
@@ -100,6 +101,28 @@ func main() {
 		defer wg.Done()
 		agentRun.MessageLoop(ctx)
 	}()
+
+	if config.HeartBeat.Enable {
+		// 心跳机制
+		hb, err := heartbeat.NewHeartBeat(*config, func(ctx context.Context, prompt string) {
+			// 触发心跳，向智能体发送一条要求心跳检查的消息
+			messageBus.PublishInbound(ctx, channel.InboundMessage{
+				Channel:   "system",    // 系统通道
+				UserID:    "heartbeat", // 发送者为心跳
+				MessageID: "heartbeat",
+				Content:   prompt, // 心跳检查提示词
+			})
+		})
+		if err != nil {
+			panic(err)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hb.Start(ctx)
+		}()
+	}
+
 	slog.Info("started beepbot...")
 	wg.Wait()
 	slog.Info("Beepbot shutdown")

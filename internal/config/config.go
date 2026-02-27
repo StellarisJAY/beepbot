@@ -14,6 +14,8 @@ type Config struct {
 	ChannelConfig   ChannelConfig   `json:"channel"`
 	Logging         Logging         `json:"logging"`
 	BuiltinTools    BuiltinTools    `json:"builtin_tools"`
+	HeartBeat       HeartBeatConfig `json:"heart_beat"`
+	Skills          SkillsConfig    `json:"skills"`
 }
 
 type ProvidersConfig struct {
@@ -83,6 +85,16 @@ type ShellTool struct {
 	Enable            bool     `json:"enable"`
 	ForbiddenCommands []string `json:"forbidden_commands"`
 	Timeout           string   `json:"timeout"`
+}
+
+type SkillsConfig struct {
+	ConfigFile string `json:"config_file"`
+}
+
+type HeartBeatConfig struct {
+	Interval      string `json:"interval"`        // 心跳间隔
+	Enable        bool   `json:"enable"`          // 是否开启心跳
+	HeartBeatFile string `json:"heart_beat_file"` // 心跳任务文件目录
 }
 
 func FromConfigFile(path string) (*Config, error) {
