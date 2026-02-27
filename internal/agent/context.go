@@ -1,3 +1,9 @@
 package agent
 
-type ContextBuilder struct{}
+type contextBuilder struct {
+	systemPrompt string
+}
+
+func (b *contextBuilder) buildContext() string {
+	return ""
+}
