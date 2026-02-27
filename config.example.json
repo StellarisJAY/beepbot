@@ -31,7 +31,7 @@
     "format": "json",
     "qq": {
       "level": "info",
-      "file": "./log/qq_channel.log"
+      "file": "./logs/qq_channel.log"
     }
   },
   "builtin_tools": {
@@ -40,5 +40,10 @@
       "forbidden_commands": ["sudo", "su", "rm", "chmod", "chown"],
       "timeout": "30s"
     }
+  },
+  "heart_beat": {
+    "enable": true,
+    "interval": "1h",
+    "heart_beat_file": "./beepbot/HEARTBEAT.md"
   }
 }
