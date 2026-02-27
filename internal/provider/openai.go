@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/StellarisJAY/beepbot/internal/types"
@@ -117,7 +116,6 @@ func buildOpenAIResponsesParams(messages []types.Message, model string, options 
 							Arguments: toolCall.Function.Arguments,
 						},
 					})
-					slog.Info("function call", "ofFunction", inputItems[len(inputItems)-1].OfFunctionCall)
 				}
 			} else {
 				inputItems = append(inputItems, responses.ResponseInputItemUnionParam{

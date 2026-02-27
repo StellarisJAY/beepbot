@@ -28,13 +28,13 @@ type ProviderConfig struct {
 }
 
 type AgentConfig struct {
-	Temperature       float32 `json:"temperature"`         // 温度
-	MaxToolIterations int     `json:"max_tool_iterations"` // 最大迭代次数
-	MaxTokens         int64   `json:"max_tokens"`          // 最大输出tokens
-	Provider          string  `json:"provider"`            // 模型供应商
-	Model             string  `json:"model"`               // 模型ID
-	SystemPrompt      string  `json:"system_prompt"`       // 系统提示词
-	WorkingDir        string  `json:"working_dir"`         // 智能体工作的目录，与主机文件系统隔离，防止智能体随便访问文件
+	Temperature   float32 `json:"temperature"`    // 温度
+	MaxIterations int     `json:"max_iterations"` // 单个agent循环的最大迭代次数
+	MaxTokens     int64   `json:"max_tokens"`     // 最大输出tokens
+	Provider      string  `json:"provider"`       // 模型供应商
+	Model         string  `json:"model"`          // 模型ID
+	SystemPrompt  string  `json:"system_prompt"`  // 系统提示词
+	WorkingDir    string  `json:"working_dir"`    // 智能体工作的目录，与主机文件系统隔离，防止智能体随便访问文件
 }
 
 type MemoryConfig struct {
@@ -64,9 +64,15 @@ type QQChannelConfig struct {
 }
 
 type Logging struct {
-	Level  string `json:"level"`
-	File   string `json:"file"`
-	Format string `json:"format"`
+	Level  string         `json:"level"`
+	File   string         `json:"file"`
+	Format string         `json:"format"`
+	QQ     ChannelLogging `json:"qq"`
+}
+
+type ChannelLogging struct {
+	Level string `json:"level"`
+	File  string `json:"file"`
 }
 
 type BuiltinTools struct {

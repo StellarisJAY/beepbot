@@ -52,7 +52,7 @@ func (s *ShellTool) Execute(ctx context.Context, params map[string]any) (string,
 	case "linux":
 		cmd = exec.CommandContext(execCtx, "sh", "-c", command)
 	case "windows":
-		cmd = exec.CommandContext(execCtx, "cmd", "/c", command)
+		cmd = exec.CommandContext(execCtx, "cmd", "/c", "chcp 65001 && "+command)
 	default:
 		cmd = exec.CommandContext(execCtx, "sh", "-c", command)
 	}
@@ -126,7 +126,7 @@ func NewShellTool(config config.Config) Tool {
 		workingDir:        config.AgentConfig.WorkingDir,
 		system:            runtime.GOOS,
 	}
-	tool.buildDescription()
+	tool.description = tool.buildDescription()
 	return tool
 }
 
@@ -135,6 +135,7 @@ func (s *ShellTool) buildDescription() string {
 	if len(s.forbiddenCommands) > 0 {
 		forbiddenList = strings.Join(s.forbiddenCommands, "\n")
 	}
+	slog.Info("forbidden shell commands", "cmds", s.forbiddenCommands)
 	return fmt.Sprintf(`执行 shell 命令并在指定工作目录中运行。
 
 <capabilities>
@@ -143,8 +144,12 @@ func (s *ShellTool) buildDescription() string {
 - 目录操作: mkdir, pwd, tree
 - 支持管道: cat file.txt | grep pattern
 - 支持重定向: echo "content" > file.txt
+- 脚本语言: python, sh
+- 编译工具: gcc, go, rustc, javac
+- 运行用户程序: example.exe, ./main
 </capabilities>
 
+当前操作系统信息:
 <os>
 %s
 </os>
@@ -158,6 +163,22 @@ func (s *ShellTool) buildDescription() string {
 %s
 </forbidden-commands>
 
+以下行为被认为是危险操作, 禁止执行:
+<dangerous-operations>
+- 删除文件或目录
+- 下载
+- 修改环境变量
+- 关闭重启系统
+- 访问不明网页
+- 其他可能产生危险的操作
+</dangerous-operations>
+
+<limits>
+- 脚本运行限制: 运行前请仔细阅读代码, 判断是否存在危险操作, 对于存在危险操作的脚本禁止使用shell工具执行。
+- 编译工具限制: 编译前请仔细阅读代码, 判断是否存在危险操作, 对于存在危险操作的程序禁止使用shell工具编译。
+- 运行用户程序限制: 用户应该描述程序的作用, 你需要判断运行是否存在危险操作, 对于存在危险操作的程序禁止使用shell工具运行。
+</limits>
+
 <examples>
 正确用法:
 - "ls -la" 列出当前目录文件
@@ -168,6 +189,9 @@ func (s *ShellTool) buildDescription() string {
 错误用法（会被拒绝）:
 - "sudo apt install xxx" 使用 sudo
 - "rm -rf /" 危险删除命令
+- "python remove_everything.py" 危险操作脚本禁止运行
+- "go build download_unknown_file.go" 危险操作程序禁止编译
+- "test.exe" 潜在危险操作程序, 用户必须描述程序作用否则禁止运行
 </examples>
 
 <important-notes>

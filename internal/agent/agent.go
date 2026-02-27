@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
@@ -13,6 +14,9 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
 )
+
+// 工具调用连续出错次数，达到这个次数将提示智能体提前结束或尝试其他方案
+const toolErrorThreshold = 3
 
 type AgentRunner struct {
 	model          types.LLMProvider
@@ -40,6 +44,8 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	toolRegistry.Register(tool.NewListDirTool(workingDir))
 	toolRegistry.Register(tool.NewReadFileTool(workingDir))
 	toolRegistry.Register(tool.NewWriteFileTool(workingDir))
+	// 操作系统信息工具
+	toolRegistry.Register(tool.NewReadSystemInfoTool())
 	// shell 工具
 	if config.BuiltinTools.Shell.Enable {
 		toolRegistry.Register(tool.NewShellTool(config))
@@ -87,8 +93,9 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, message channel.InboundMessage) {
 	model := a.config.AgentConfig.Model
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
-	maxIterations := a.config.AgentConfig.MaxToolIterations
+	maxIterations := a.config.AgentConfig.MaxIterations
 
+	// 限制一次agent循环的默认最大迭代次数为50
 	if maxIterations == 0 {
 		maxIterations = 50
 	}
@@ -115,6 +122,9 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		Role:    types.RoleUser,
 		Content: message.Content,
 	})
+
+	// 连续错误工具计数
+	toolErrorCounter := make(map[string]int)
 
 	// 智能体循环
 	for iterations := range maxIterations {
@@ -165,6 +175,15 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			// TODO MCP
 		}
 
+		// 如果有连续错误计数的工具不在调用列表，则清空计数
+		for key := range toolErrorCounter {
+			if !slices.ContainsFunc(functionCalls, func(item types.ToolCall) bool {
+				return item.Function.Name == key
+			}) {
+				toolErrorCounter[key] = 0
+			}
+		}
+
 		// 将工具调用消息添加到会话
 		assistantMsg := types.Message{
 			Role:      types.RoleAssistant,
@@ -188,6 +207,15 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 					Content:    err.Error(),
 					ToolCallID: tc.ID,
 				}
+				// 检查是否超出连续工具调用错误限制
+				count, ok := toolErrorCounter[tc.Function.Name]
+				if !ok {
+					count = 1
+					toolErrorCounter[tc.Function.Name] = count
+				}
+				if count > toolErrorThreshold {
+					toolMessage.Content = fmt.Sprintf("工具调用已连续错误:%d次, 请停止继续调用该工具, 请尝试其他方案或直接回复用户。", count)
+				}
 				slog.Debug("Tool call error", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "error", err)
 				session.AppendMessage(toolMessage)
 				continue
@@ -203,16 +231,4 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			session.AppendMessage(toolMessage)
 		}
 	}
-}
-
-func (a *AgentRunner) publishToolCallMessage(ctx context.Context, channelName, userID string, tc types.ToolCall, result string) {
-	// 压缩结果
-	truncatedResult := result[:min(len(result), 20)] + "..."
-	msg := channel.OutboundMessage{
-		Channel:     channelName,
-		UserID:      userID,
-		Content:     fmt.Sprintf("工具=\"%s\"调用成功，结果:\"%s\"", tc.Function.Name, truncatedResult),
-		MessageType: channel.TextMessage,
-	}
-	a.bus.PublishOutbound(ctx, msg)
 }
