@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -54,7 +55,10 @@ func InitLogger(config config.Logging) {
 	default:
 		handler = slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: logLevel})
 	}
-
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
+
+	if err := initQQChannelLogger(config); err != nil {
+		panic(fmt.Errorf("init qq channel logger failed:%w", err))
+	}
 }

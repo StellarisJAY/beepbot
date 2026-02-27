@@ -9,7 +9,7 @@
     "provider": "dashscope",
     "model": "qwen3.5-plus",
     "temperature": 0.2,
-    "max_tool_iterations": 50,
+    "max_iterations": 50,
     "max_tokens": 4096,
     "system_prompt": "You are a helpful assistant.",
     "working_dir": "D:/data/beepbot"
@@ -28,7 +28,11 @@
   "logging": {
     "level": "info",
     "file": "",
-    "format": "json"
+    "format": "json",
+    "qq": {
+      "level": "info",
+      "file": "./log/qq_channel.log"
+    }
   },
   "builtin_tools": {
     "shell": {
