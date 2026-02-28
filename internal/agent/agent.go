@@ -26,12 +26,8 @@ type AgentRunner struct {
 	config         config.Config
 	tools          *tool.ToolRegistry
 	skillManager   *skill.Manager
+	modelID        string
 }
-
-// TODO builtin prompt
-const builtinSystemPrompt = `
-	You are a helpful assistant.
-`
 
 func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, error) {
 	// 创建聊天模型接口
@@ -39,6 +35,7 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	if err != nil {
 		return nil, err
 	}
+	modelID := config.AgentConfig.Model
 	// 注册工具
 	toolRegistry := tool.NewToolRegistry()
 	// 文件系统工具需要传入工作目录，实现访问隔离
@@ -46,6 +43,8 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
 	toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
 	toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
+	// TODO 任务管理工具
+	toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
 	// 操作系统信息工具
 	toolRegistry.Register(tool.NewReadSystemInfoTool())
 	// shell 工具
@@ -66,6 +65,7 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 		bus:            bus,
 		tools:          toolRegistry,
 		skillManager:   skillManager,
+		modelID:        modelID,
 	}
 	return agentRun, nil
 }
@@ -132,31 +132,18 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	// 连续错误工具计数
 	toolErrorCounter := make(map[string]int)
 
-	// 生成技能提示词
-	skillsPrompt, err := a.skillManager.GenerateSkillsPrompt()
-	if err != nil {
-		slog.Error("failed to generate skills prompt", "error", err)
-		skillsPrompt = "Failed to load skills information."
+	// 上下文构建器
+	contextBuilder := contextBuilder{
+		systemPrompt: a.config.AgentConfig.SystemPrompt,
+		skillManager: a.skillManager,
+		session:      session,
 	}
+	contextBuilder.prebuild()
 
 	// 智能体循环
 	for iterations := range maxIterations {
-		messages := []types.Message{
-			{
-				Role:    types.RoleSystem,
-				Content: builtinSystemPrompt,
-			},
-			{
-				Role:    types.RoleSystem,
-				Content: a.config.AgentConfig.SystemPrompt,
-			},
-			{
-				Role:    types.RoleSystem,
-				Content: skillsPrompt,
-			},
-		}
-		// TODO 上下文构建
-		messages = append(messages, session.GetHistory()...)
+		// 上下文
+		messages := contextBuilder.buildContext()
 
 		// 调用大模型api
 		response, err := a.model.Chat(ctx, messages, model, options)
