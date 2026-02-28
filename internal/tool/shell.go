@@ -2,23 +2,117 @@ package tool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/config"
 )
 
+// 无论用户如何配置, 绝对禁止的命令
+// 最佳实践: 为智能体创建一个单独的系统用户，并分配有限的权限
+var mustForbiddenCommands = []string{
+	// 文件操作
+	"rm",
+	"rm -r",
+	"rm -rf",
+	"ln",
+
+	// 系统管理
+	"shutdown",
+	"reboot",
+	"systemctl",
+	"service",
+	"halt",
+	"poweroff",
+
+	// 权限管理
+	"sudo",
+	"su",
+	"chmod",
+	"chown",
+	"chgrp",
+	"passwd",
+	"useradd",
+	"userdel",
+	"usermod",
+	"groupadd",
+	"groupdel",
+
+	// 文件系统和磁盘
+	"mkfs",
+	"dd",
+	"shred",
+	"wipe",
+	"format",
+	"fdisk",
+	"parted",
+	"gparted",
+	"mount",
+	"umount",
+	"fsck",
+
+	// 网络配置
+	"iptables",
+	"ip6tables",
+	"ifconfig",
+	"ip route",
+	"netplan",
+	"nmcli",
+
+	// 进程管理
+	"kill", // 终止进程
+	"killall",
+	"pkill",
+	"xkill",
+
+	// 包管理器
+	"apt",
+	"apt-get",
+	"aptitude",
+	"dnf",
+	"yum",
+	"rpm",
+	"pacman",
+	"yaourt",
+	"yay",
+	"emerge",
+	"zypper",
+	"snap",
+	"flatpak",
+
+	// 环境变量
+	"export",
+	"setx",
+	"env",
+
+	// 远程访问
+	"ssh",
+	"sshpass",
+	"telnet",
+	"rsh",
+	"rlogin",
+
+	// 其他危险命令
+	"batch",   // 批处理任务
+	"eval",    // 执行字符串命令，可绕过检测
+	"exec",    // 执行命令
+	"source",  // 执行脚本
+	"debugfs", // 调试文件系统，可能绕过权限
+}
+
+// Shell工具
 type ShellTool struct {
-	workingDir        string
-	allowedCommands   []string
-	forbiddenCommands []string
-	timeout           time.Duration
-	description       string
-	system            string // 当前的操作系统环境
+	workingDir        string        // 工作目录，所有shell命令在该目录执行
+	forbiddenCommands []string      // 禁用命令列表, 如果执行的命令包含禁用命令, 执行将被拒绝
+	timeout           time.Duration // 超时时间
+	description       string        // 生成好的工具描述，避免每次获取描述都重新拼字符串
+	system            string        // 当前的操作系统环境
 }
 
 // Description implements [Tool].
@@ -35,33 +129,29 @@ func (s *ShellTool) Execute(ctx context.Context, params map[string]any) (string,
 	command = strings.TrimSpace(command)
 	slog.Info("Shell tool executing", "command", command, "working_dir", s.workingDir)
 
-	// 2. 安全检查
+	// 2. 禁用命令检查
 	if s.isForbidden(command) {
-		err := fmt.Errorf("command is forbidden: %s", command)
-		slog.Warn("Shell tool blocked forbidden command", "command", command)
-		return "", err
+		slog.Info("shell tool execute failed", "command", command, "reason", "forbidden")
+		return "", errors.New("forbidden command")
 	}
 
-	// 3. 超时控制
+	// 4. 路径安全检查
+	if s.pathSafetyCheck(command) {
+		slog.Info("shell too execute failed", "command", command, "reason", "break out of working directory")
+		return "", errors.New("command breaks out of working directory")
+	}
+
+	// 5. 超时控制
 	execCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	// 4. 执行命令
-	var cmd *exec.Cmd
-	switch s.system {
-	case "linux":
-		cmd = exec.CommandContext(execCtx, "sh", "-c", command)
-	case "windows":
-		cmd = exec.CommandContext(execCtx, "cmd", "/c", "chcp 65001 && "+command)
-	default:
-		cmd = exec.CommandContext(execCtx, "sh", "-c", command)
-	}
-
+	// 6. 执行命令
+	cmd := exec.CommandContext(execCtx, "sh", "-c", command)
+	// 限制在工作目录
 	cmd.Dir = s.workingDir
-
 	output, err := cmd.CombinedOutput()
 
-	// 5. 处理结果
+	// 7. 处理结果
 	result := string(output)
 	if err != nil {
 		if execCtx.Err() == context.DeadlineExceeded {
@@ -75,6 +165,7 @@ func (s *ShellTool) Execute(ctx context.Context, params map[string]any) (string,
 	return result, nil
 }
 
+// isForbidden 禁用命令检查
 func (s *ShellTool) isForbidden(command string) bool {
 	command = strings.TrimSpace(command)
 	lowerCmd := strings.ToLower(command)
@@ -84,13 +175,17 @@ func (s *ShellTool) isForbidden(command string) bool {
 		if forbidden == "" {
 			continue
 		}
-
-		// 检查命令是否以 forbidden 开头
+		// 检查命令是否包含了禁用命令
 		if strings.HasPrefix(lowerCmd, strings.ToLower(forbidden)) {
 			return true
 		}
 	}
+	return false
+}
 
+// pathSafetyCheck 路径安全检查
+func (s *ShellTool) pathSafetyCheck(command string) bool {
+	// TODO 路径安全检查
 	return false
 }
 
@@ -120,8 +215,13 @@ func NewShellTool(config config.Config) Tool {
 		timeout = 30 * time.Second
 	}
 
+	// 合并配置的禁用命令和系统强制禁用命令
+	forbiddenCommands := shellToolConfig.ForbiddenCommands
+	forbiddenCommands = append(forbiddenCommands, mustForbiddenCommands...)
+	forbiddenCommands = slices.Compact(forbiddenCommands)
+
 	tool := &ShellTool{
-		forbiddenCommands: shellToolConfig.ForbiddenCommands,
+		forbiddenCommands: forbiddenCommands,
 		timeout:           timeout,
 		workingDir:        config.AgentConfig.WorkingDir,
 		system:            runtime.GOOS,
@@ -166,10 +266,9 @@ func (s *ShellTool) buildDescription() string {
 以下行为被认为是危险操作, 禁止执行:
 <dangerous-operations>
 - 删除文件或目录
-- 下载
+- 下载不明文件
 - 修改环境变量
 - 关闭重启系统
-- 访问不明网页
 - 其他可能产生危险的操作
 </dangerous-operations>
 
