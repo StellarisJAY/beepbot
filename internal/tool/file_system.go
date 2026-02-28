@@ -11,29 +11,30 @@ import (
 
 // fileSystemTool 文件系统工具的公共基础结构
 type fileSystemTool struct {
-	workingDir string
+	workingDir     string // 智能体工作目录
+	beepbotDataDir string // beepbot公共数据目录
 }
 
-// resolvePath 将相对路径解析为工作目录内的绝对路径，防止路径遍历
+// resolvePath 将相对路径转换成工作目录内的路径，判断绝对路径是否是可用访问的路径
 func (f *fileSystemTool) resolvePath(path string) (string, error) {
-	// 清理路径，移除前缀的 / 或 ./
-	cleanPath := strings.TrimPrefix(path, "/")
-	cleanPath = strings.TrimPrefix(cleanPath, "./")
-
-	// 与工作目录拼接
-	fullPath := filepath.Join(f.workingDir, cleanPath)
-
-	// 转换为绝对路径并清理（解析 ..）
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
+	absPath := path
+	var err error
+	// 如果不是绝对路径，则是工作目录内部的相对路径，做工作目录安全检查
+	if !filepath.IsAbs(path) {
+		// 清理路径，移除前缀的 / 或 ./
+		cleanPath := strings.TrimPrefix(path, "./")
+		// 与工作目录拼接
+		fullPath := filepath.Join(f.workingDir, cleanPath)
+		// 转换为绝对路径并清理（解析 ..）
+		absPath, err = filepath.Abs(fullPath)
+		if err != nil {
+			return "", fmt.Errorf("invalid path: %w", err)
+		}
 	}
-
-	// 安全检查：确保解析后的路径仍在工作目录内
-	if !strings.HasPrefix(absPath, f.workingDir) {
-		return "", fmt.Errorf("access denied: path %q attempts to escape working directory", path)
+	// 安全检查：确保解析后的路径仍在工作目录内或公共数据目录
+	if !strings.HasPrefix(absPath, f.workingDir) && !strings.HasPrefix(absPath, f.beepbotDataDir) {
+		return "", fmt.Errorf("access denied: path %q attempts to escape working directory and beepbot data directory", path)
 	}
-
 	return absPath, nil
 }
 
@@ -42,10 +43,11 @@ type ReadFileTool struct {
 	fileSystemTool
 }
 
-func NewReadFileTool(workingDir string) *ReadFileTool {
+func NewReadFileTool(workingDir string, beepbotDataDir string) *ReadFileTool {
 	workingDirAbs, _ := filepath.Abs(workingDir)
+	beepbotDataDirAbs, _ := filepath.Abs(beepbotDataDir)
 	return &ReadFileTool{
-		fileSystemTool: fileSystemTool{workingDir: workingDirAbs},
+		fileSystemTool: fileSystemTool{workingDir: workingDirAbs, beepbotDataDir: beepbotDataDirAbs},
 	}
 }
 
@@ -95,9 +97,11 @@ type ListDirTool struct {
 	fileSystemTool
 }
 
-func NewListDirTool(workingDir string) *ListDirTool {
+func NewListDirTool(workingDir string, beepbotDataDir string) *ListDirTool {
+	workingDirAbs, _ := filepath.Abs(workingDir)
+	beepbotDataDirAbs, _ := filepath.Abs(beepbotDataDir)
 	return &ListDirTool{
-		fileSystemTool: fileSystemTool{workingDir: workingDir},
+		fileSystemTool: fileSystemTool{workingDir: workingDirAbs, beepbotDataDir: beepbotDataDirAbs},
 	}
 }
 
@@ -106,7 +110,7 @@ func (r *ListDirTool) Name() string {
 }
 
 func (r *ListDirTool) Description() string {
-	return "List the files in a directory (relative to working directory)"
+	return "List the files in a directory (relative to working directory or )"
 }
 
 func (r *ListDirTool) Parameters() map[string]any {
@@ -146,9 +150,11 @@ type WriteFileTool struct {
 	fileSystemTool
 }
 
-func NewWriteFileTool(workingDir string) *WriteFileTool {
+func NewWriteFileTool(workingDir string, beepbotDataDir string) *WriteFileTool {
+	workingDirAbs, _ := filepath.Abs(workingDir)
+	beepbotDataDirAbs, _ := filepath.Abs(beepbotDataDir)
 	return &WriteFileTool{
-		fileSystemTool: fileSystemTool{workingDir: workingDir},
+		fileSystemTool: fileSystemTool{workingDir: workingDirAbs, beepbotDataDir: beepbotDataDirAbs},
 	}
 }
 

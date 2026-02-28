@@ -15,7 +15,7 @@ type Config struct {
 	Logging         Logging         `json:"logging"`
 	BuiltinTools    BuiltinTools    `json:"builtin_tools"`
 	HeartBeat       HeartBeatConfig `json:"heart_beat"`
-	Skills          SkillsConfig    `json:"skills"`
+	DataDir         string          `json:"beepbot_data_dir"`
 }
 
 type ProvidersConfig struct {
@@ -85,10 +85,6 @@ type ShellTool struct {
 	Enable            bool     `json:"enable"`
 	ForbiddenCommands []string `json:"forbidden_commands"`
 	Timeout           string   `json:"timeout"`
-}
-
-type SkillsConfig struct {
-	ConfigFile string `json:"config_file"`
 }
 
 type HeartBeatConfig struct {

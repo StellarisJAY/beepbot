@@ -11,6 +11,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/provider"
 	"github.com/StellarisJAY/beepbot/internal/session"
+	"github.com/StellarisJAY/beepbot/internal/skill"
 	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
 )
@@ -24,6 +25,7 @@ type AgentRunner struct {
 	sessionManager *session.SessionManager
 	config         config.Config
 	tools          *tool.ToolRegistry
+	skillManager   *skill.Manager
 }
 
 // TODO builtin prompt
@@ -41,9 +43,9 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	toolRegistry := tool.NewToolRegistry()
 	// 文件系统工具需要传入工作目录，实现访问隔离
 	workingDir := config.AgentConfig.WorkingDir
-	toolRegistry.Register(tool.NewListDirTool(workingDir))
-	toolRegistry.Register(tool.NewReadFileTool(workingDir))
-	toolRegistry.Register(tool.NewWriteFileTool(workingDir))
+	toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
+	toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
+	toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
 	// 操作系统信息工具
 	toolRegistry.Register(tool.NewReadSystemInfoTool())
 	// shell 工具
@@ -54,12 +56,16 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	// 会话管理器，管理不同会话的消息缓存和长期记忆
 	sessionManager := session.NewSessionManager(config)
 
+	// 创建技能管理器
+	skillManager := skill.NewManager(config.DataDir, workingDir)
+
 	agentRun := &AgentRunner{
 		model:          llmProvider,
 		sessionManager: sessionManager,
 		config:         config,
 		bus:            bus,
 		tools:          toolRegistry,
+		skillManager:   skillManager,
 	}
 	return agentRun, nil
 }
@@ -126,6 +132,13 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	// 连续错误工具计数
 	toolErrorCounter := make(map[string]int)
 
+	// 生成技能提示词
+	skillsPrompt, err := a.skillManager.GenerateSkillsPrompt()
+	if err != nil {
+		slog.Error("failed to generate skills prompt", "error", err)
+		skillsPrompt = "Failed to load skills information."
+	}
+
 	// 智能体循环
 	for iterations := range maxIterations {
 		messages := []types.Message{
@@ -136,6 +149,10 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			{
 				Role:    types.RoleSystem,
 				Content: a.config.AgentConfig.SystemPrompt,
+			},
+			{
+				Role:    types.RoleSystem,
+				Content: skillsPrompt,
 			},
 		}
 		// TODO 上下文构建

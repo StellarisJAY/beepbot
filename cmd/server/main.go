@@ -44,6 +44,24 @@ func ensureWorkingDir(config *config.Config) error {
 	return nil
 }
 
+func ensureDataDir(config *config.Config) error {
+	dataDir := config.DataDir
+	dataDir = strings.TrimSpace(dataDir)
+	if dataDir == "" {
+		dataDir = "./beepbot"
+	}
+	dataDirAbs, err := filepath.Abs(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dataDirAbs, os.ModeDir); err != nil {
+		return err
+	}
+	config.DataDir = dataDirAbs
+	slog.Info("Beepbot data directory", "path", dataDirAbs)
+	return nil
+}
+
 func main() {
 	flag.Parse()
 	// 加载配置文件
@@ -59,7 +77,8 @@ func main() {
 	if err := db.InitDatabase(*config); err != nil {
 		panic(err)
 	}
-
+	// 创建公共数据目录
+	ensureDataDir(config)
 	// 创建工作目录
 	ensureWorkingDir(config)
 
