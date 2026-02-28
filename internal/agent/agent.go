@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -97,7 +98,6 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 }
 
 func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, message channel.InboundMessage) {
-	model := a.config.AgentConfig.Model
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.config.AgentConfig.MaxIterations
 
@@ -140,13 +140,26 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	}
 	contextBuilder.prebuild()
 
-	// 智能体循环
-	for iterations := range maxIterations {
+	// 智能体循环, 加5步来整理总结
+	// TODO 更好的结束策略
+	for iterations := range maxIterations + 5 {
+		// 如果达到了最大迭代次数，添加一条提示结束任务和记录任务状态的消息
+		if iterations == maxIterations {
+			session.AppendMessage(types.Message{
+				Role:    types.RoleSystem,
+				Content: completionMessage,
+			})
+		}
+
 		// 上下文
 		messages := contextBuilder.buildContext()
 
+		for _, msg := range messages {
+			fmt.Print(msg.Role + ",")
+		}
+
 		// 调用大模型api
-		response, err := a.model.Chat(ctx, messages, model, options)
+		response, err := a.model.Chat(ctx, messages, a.modelID, options)
 		if err != nil {
 			slog.Error("model api error", "iteration", iterations, "error", err)
 			continue
@@ -199,11 +212,15 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		// 执行工具函数
 		for _, tc := range functionCalls {
 			params := make(map[string]any)
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &params); err != nil {
+			var err error
+			var result string
+			if err = json.Unmarshal([]byte(tc.Function.Arguments), &params); err != nil {
 				slog.Error("parse function call arguments error", "tool", tc.Name, "args", tc.Function.Arguments)
-				continue
+				err = errors.New("invalid arguments")
+			} else {
+				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID)
 			}
-			result, err := a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID)
+
 			if err != nil {
 				// 返回错误结果
 				toolMessage := types.Message{

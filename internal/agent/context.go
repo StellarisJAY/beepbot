@@ -91,6 +91,10 @@ const builtinSystemPrompt = `
 </reminder>
 `
 
+const completionMessage = `
+	当前任务已达到最大迭代次数, 请总结记录任务状态并回复用户.
+`
+
 type contextBuilder struct {
 	systemPrompt     string
 	skillManager     *skill.Manager
