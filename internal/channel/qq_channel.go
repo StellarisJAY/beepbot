@@ -134,9 +134,6 @@ func (c *QQBotChannel) CreateC2CMessageHandler(ctx context.Context) event.C2CMes
 			return errors.New("received message with no sender ID")
 		}
 		senderID := data.Author.ID
-		if data.Content == "" {
-			return errors.New("received message with empty content")
-		}
 		slog.Debug("receive QQ c2c message", "userID", senderID)
 		message := InboundMessage{
 			Channel:   c.ID(),
