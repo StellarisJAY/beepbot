@@ -4,12 +4,11 @@
 
 BeepBot 是一个用 Go 语言编写的 AI 代理机器人，通过多种消息渠道提供智能对话能力。它支持 OpenAI 和 DashScope（阿里云）等 LLM 提供商，可通过 QQ 机器人 API 或控制台界面与用户交互。
 
-该机器人具有 ReAct 风格的代理循环和工具调用能力，可以执行 shell 命令、读写文件、收集系统信息，帮助用户完成各种任务。
+该机器人具有 ReAct 风格的代理循环和工具调用能力，可以执行 shell 命令、读写文件、管理任务列表、收集系统信息，帮助用户完成各种任务。
 
 ## 技术栈
 
 - **语言**: Go 1.24.5
-- **数据库**: SQLite with GORM
 - **LLM 提供商**: OpenAI API 兼容 (OpenAI, DashScope)
 - **消息渠道**: QQ 机器人 (腾讯), 控制台
 - **主要依赖**:
@@ -37,8 +36,6 @@ beepbot/
 │   │   └── system_channel.go    # 系统/内部渠道
 │   ├── config/
 │   │   └── config.go            # 配置结构和加载
-│   ├── db/
-│   │   └── sqlite.go            # 数据库初始化和会话操作
 │   ├── heartbeat/
 │   │   └── heartbeat.go         # 定期心跳任务调度器
 │   ├── logger/
@@ -59,10 +56,11 @@ beepbot/
 │   │   └── skill.go             # 技能管理系统
 │   ├── tool/
 │   │   ├── base.go              # 工具接口定义
-│   │   ├── file_system.go       # 文件读/写/列表工具
+│   │   ├── file_system.go       # 文件读/写/列表/编辑工具
 │   │   ├── message.go           # 消息工具
 │   │   ├── shell.go             # Shell 执行工具
 │   │   ├── system.go            # 系统信息工具
+│   │   ├── todo.go              # TODO 任务管理工具
 │   │   └── tool_registry.go     # 工具注册表
 │   └── types/
 │       ├── cron.go              # Cron 相关类型
@@ -70,7 +68,8 @@ beepbot/
 │       ├── provider.go          # LLM 提供商接口和消息类型
 │       └── session.go           # 会话数据库模型
 ├── beepbot/
-│   └── HEARTBEAT.md             # 心跳任务定义文件
+│   ├── HEARTBEAT.md             # 心跳任务定义文件
+│   └── skills/                  # 全局技能目录
 ├── beepbot.db                   # SQLite 数据库文件（生成）
 ├── logs/                        # 日志文件目录（生成）
 ├── config.json                  # 配置文件
@@ -162,9 +161,7 @@ go build -o beepbot.exe ./cmd/server
     "interval": "60s",
     "heart_beat_file": "./beepbot/HEARTBEAT.md"
   },
-  "skills": {
-    "config_file": "./skills.json"
-  }
+  "beepbot_data_dir": "./beepbot"
 }
 ```
 
@@ -208,13 +205,15 @@ go build -o beepbot.exe ./cmd/server
   - `interval`: 心跳间隔（例如 "60s", "5m", "1h"）
   - `heart_beat_file`: 包含心跳任务的文件
 
+- **beepbot_data_dir**: BeepBot 公共数据目录，用于存储全局技能、共享数据等
+
 ## 架构
 
 ### 消息流
 
 1. **入站消息**: 渠道（QQ/控制台）接收消息并发布到 MessageBus
 2. **代理处理**: AgentRunner 消费消息、管理会话、协调 LLM 调用
-3. **工具执行**: 代理可在对话期间调用工具（shell、文件系统）
+3. **工具执行**: 代理可在对话期间调用工具（shell、文件系统、TODO 管理）
 4. **出站消息**: 响应发布到 MessageBus 并分发到相应渠道
 
 ### 代理循环 (ReAct 模式)
@@ -237,7 +236,11 @@ go build -o beepbot.exe ./cmd/server
 - 创建/更新时间戳
 - 可选摘要（供将来使用）
 
-会话持久化到 SQLite 数据库。
+会话存储在内存中，重启后历史记录将清空。
+
+会话历史采用 FIFO 策略，当达到窗口大小时：
+- 普通消息：删除最早的消息
+- 包含 tool_calls 的 assistant 消息：同时删除对应的 tool 结果消息
 
 ### 工具系统
 
@@ -254,9 +257,25 @@ type Tool interface {
 内置工具：
 - `read_file`: 从工作目录读取文件内容
 - `write_file`: 向工作目录写入文件
+- `edit_file`: 编辑文件（精确搜索替换）
 - `list_dir`: 列出目录内容
 - `shell`: 执行 shell 命令（有限制）
 - `system_info`: 获取系统信息
+- `todo`: 任务管理工具（添加、列出、更新、删除、清除任务）
+
+### 技能系统
+
+技能系统允许为智能体定义可复用的技能指令。技能存储在两个位置：
+- **全局技能目录**: `{beepbot_data_dir}/skills/` - 所有工作空间共享
+- **工作空间技能目录**: `{working_dir}/skills/` - 当前工作空间专用
+
+每个技能是一个包含 `SKILL.md` 文件的目录，格式如下：
+```markdown
+# 技能名称
+技能简短描述（第二行到空行之前）
+
+详细指令内容...
+```
 
 ### 渠道系统
 
@@ -273,7 +292,7 @@ type Tool interface {
 - 工作目录隔离限制文件系统访问
 
 ### 文件系统隔离
-- 所有文件操作限制在配置的 `working_dir` 内
+- 所有文件操作限制在配置的 `working_dir` 或 `beepbot_data_dir` 内
 - 路径遍历保护解析和验证路径
 - 访问工作目录外路径的尝试被拒绝
 
@@ -333,13 +352,15 @@ GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o beepbot ./cmd/server
 
 1. **工作目录**: 配置中的 `working_dir` 隔离文件操作。确保它存在并具有适当的权限。
 
-2. **QQ 机器人**: 需要腾讯 QQ 机器人平台的有效 AppID 和 AppSecret。消息将 `.` 替换为 `·` 以避免 URL 检测问题。
+2. **数据目录**: `beepbot_data_dir` 用于存储全局技能、共享数据等公共资源。文件工具可以访问此目录。
 
-3. **心跳**: 心跳系统从 markdown 文件读取任务，并按配置间隔触发代理处理。适用于自动化和定时任务。
+3. **QQ 机器人**: 需要腾讯 QQ 机器人平台的有效 AppID 和 AppSecret。消息将 `.` 替换为 `·` 以避免 URL 检测问题。
 
-4. **数据库**: SQLite 数据库文件（`beepbot.db`）自动创建。备份此文件以保留对话历史。
+4. **心跳**: 心跳系统从 markdown 文件读取任务，并按配置间隔触发代理处理。适用于自动化和定时任务。
 
 5. **API 密钥**: 切勿将 API 密钥提交到版本控制。在生产环境中使用环境变量或安全密钥管理。
+
+6. **TODO 管理**: TODO 工具将任务列表存储在工作目录的 `TODO.md` 文件中，支持添加、列出、更新、删除和清除操作。
 
 ## 许可证
 
