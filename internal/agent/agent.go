@@ -102,6 +102,8 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.config.AgentConfig.MaxIterations
 
+	totalTokenUsage := types.TokenUsage{}
+
 	// 限制一次agent循环的默认最大迭代次数为50
 	if maxIterations == 0 {
 		maxIterations = 50
@@ -170,6 +172,13 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			break
 		}
 
+		// 记录token用量
+		totalTokenUsage.CacheTokens += response.Usage.CacheTokens
+		totalTokenUsage.InputTokens += response.Usage.InputTokens
+		totalTokenUsage.OutputTokens += response.Usage.OutputTokens
+		totalTokenUsage.ReasoningTokens += response.Usage.ReasoningTokens
+		totalTokenUsage.TotalTokens += totalTokenUsage.InputTokens + totalTokenUsage.OutputTokens + totalTokenUsage.ReasoningTokens
+
 		// 没有工具调用，直接返回消息
 		if response.FinishReason != "tool_calls" {
 			session.AppendMessage(types.Message{
@@ -184,7 +193,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				MessageType:      channel.MarkdownMsg,
 				InboundMessageID: inboundMsgID,
 			})
-			return
+			break
 		}
 
 		// 获得不同类型的工具调用
@@ -257,4 +266,6 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			session.AppendMessage(toolMessage)
 		}
 	}
+
+	slog.Info("agent loop finished", "token_usage", totalTokenUsage)
 }
