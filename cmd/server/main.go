@@ -13,7 +13,6 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/agent"
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
-	"github.com/StellarisJAY/beepbot/internal/db"
 	"github.com/StellarisJAY/beepbot/internal/heartbeat"
 	"github.com/StellarisJAY/beepbot/internal/logger"
 )
@@ -36,7 +35,7 @@ func ensureWorkingDir(config *config.Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(workingDirAbs, os.ModeDir); err != nil {
+	if err := os.MkdirAll(workingDirAbs, 0755); err != nil {
 		return err
 	}
 	config.AgentConfig.WorkingDir = workingDirAbs
@@ -54,7 +53,7 @@ func ensureDataDir(config *config.Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dataDirAbs, os.ModeDir); err != nil {
+	if err := os.MkdirAll(dataDirAbs, 0755); err != nil {
 		return err
 	}
 	config.DataDir = dataDirAbs
@@ -73,10 +72,6 @@ func main() {
 	// 初始化日志
 	logger.InitLogger(config.Logging)
 
-	// 初始化数据库
-	if err := db.InitDatabase(*config); err != nil {
-		panic(err)
-	}
 	// 创建公共数据目录
 	ensureDataDir(config)
 	// 创建工作目录

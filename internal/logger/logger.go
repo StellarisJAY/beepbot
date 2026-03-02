@@ -22,8 +22,8 @@ func InitLogger(config config.Logging) {
 		panic(err)
 	}
 	dir := filepath.Dir(absPath)
-	os.MkdirAll(dir, os.ModeDir)
-	file, err := os.OpenFile(absPath, os.O_CREATE|os.O_APPEND, 0644)
+	os.MkdirAll(dir, 0755)
+	file, err := os.OpenFile(absPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}

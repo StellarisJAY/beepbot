@@ -330,7 +330,7 @@ func (w *WriteTodoTool) saveTodoList(todoList *TodoList) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	return os.WriteFile(todoPath, data, 0644)
+	return os.WriteFile(todoPath, data, 0755)
 }
 
 // generateID 生成唯一ID
