@@ -3,12 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 )
 
 type OpenAIProvider struct {
@@ -29,144 +28,118 @@ func NewOpenAIProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
 }
 
 func (d *OpenAIProvider) Chat(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*types.LLMResponse, error) {
-	params := buildOpenAIResponsesParams(messages, model, options)
-	result, err := d.client.Responses.New(ctx, params)
+	params := buildOpenAICompletionsParams(messages, model, options)
+	result, err := d.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("invoke openai responses api error: %w", err)
 	}
-	if result.Error.Code != "" {
-		return nil, fmt.Errorf("openai api error, %s:%s", result.Error.Code, result.Error.Message)
-	}
 	response := new(types.LLMResponse)
+
 	// 记录token用量
 	response.Usage = &types.TokenUsage{
-		InputTokens:     result.Usage.InputTokens,
-		OutputTokens:    result.Usage.OutputTokens,
-		CacheTokens:     result.Usage.InputTokensDetails.CachedTokens,
-		ReasoningTokens: result.Usage.OutputTokensDetails.ReasoningTokens,
+		InputTokens:     result.Usage.PromptTokens,
+		OutputTokens:    result.Usage.CompletionTokens,
+		CacheTokens:     result.Usage.PromptTokensDetails.CachedTokens,
+		ReasoningTokens: result.Usage.CompletionTokensDetails.ReasoningTokens,
 	}
 
 	response.ToolCalls = make([]types.ToolCall, 0)
-	outputText := strings.Builder{}
-	for _, output := range result.Output {
-		if output.Type == "function_call" {
-			fc := output.AsFunctionCall()
-			response.ToolCalls = append(response.ToolCalls, types.ToolCall{
-				Type: "function",
-				Name: fc.Name,
-				Function: &types.FunctionCall{
-					Name:      fc.Name,
-					Arguments: fc.Arguments,
-				},
-				ID: fc.CallID,
-			})
-		}
-		if output.Type == "message" {
-			for _, content := range output.Content {
-				if content.Type == "output_text" {
-					outputText.WriteString(content.Text)
-				}
-			}
-		}
+	for _, tc := range result.Choices[0].Message.ToolCalls {
+		response.ToolCalls = append(response.ToolCalls, types.ToolCall{
+			Type: "function",
+			Name: tc.Function.Name,
+			Function: &types.FunctionCall{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+			ID: tc.ID,
+		})
 	}
-	response.Content = outputText.String()
-
+	response.FinishReason = result.Choices[0].FinishReason
+	response.Content = result.Choices[0].Message.Content
 	return response, nil
 }
 
-func buildOpenAIResponsesParams(messages []types.Message, model string, options types.ChatOptions) responses.ResponseNewParams {
-	var inputItems responses.ResponseInputParam
-	var instructions string
+func buildOpenAICompletionsParams(messages []types.Message, model string, options types.ChatOptions) openai.ChatCompletionNewParams {
+	// 1. 转换消息
+	chatMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
 
 	for _, msg := range messages {
 		switch msg.Role {
-		case "system":
-			instructions = msg.Content
-		case "user":
-			if msg.ToolCallID != "" {
-				inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-					OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-						CallID: msg.ToolCallID,
-						Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.Opt(msg.Content)},
-					},
-				})
-			} else {
-				inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-					OfMessage: &responses.EasyInputMessageParam{
-						Role:    responses.EasyInputMessageRoleUser,
-						Content: responses.EasyInputMessageContentUnionParam{OfString: openai.Opt(msg.Content)},
-					},
-				})
+		case types.RoleSystem:
+			// 系统消息
+			chatMessages = append(chatMessages, openai.SystemMessage(msg.Content))
+		case types.RoleUser:
+			// 用户消息
+			chatMessages = append(chatMessages, openai.UserMessage(msg.Content))
+
+		case types.RoleAssistant:
+
+			assistantMessage := openai.ChatCompletionMessageParamUnion{
+				OfAssistant: &openai.ChatCompletionAssistantMessageParam{},
 			}
-		case "assistant":
+			// 助手消息 - 需要处理可能的 ToolCalls
 			if len(msg.ToolCalls) > 0 {
-				if msg.Content != "" {
-					inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-						OfMessage: &responses.EasyInputMessageParam{
-							Role:    responses.EasyInputMessageRoleAssistant,
-							Content: responses.EasyInputMessageContentUnionParam{OfString: openai.Opt(msg.Content)},
+				// 有工具调用的助手消息
+				toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolCalls))
+
+				for _, tc := range msg.ToolCalls {
+					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
+						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+							ID: tc.ID,
+							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+								Name:      tc.Function.Name,
+								Arguments: tc.Function.Arguments,
+							},
 						},
 					})
 				}
-				for _, toolCall := range msg.ToolCalls {
-					inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-						OfFunctionCall: &responses.ResponseFunctionToolCallParam{
-							CallID:    toolCall.ID,
-							Name:      toolCall.Function.Name,
-							Arguments: toolCall.Function.Arguments,
-						},
-					})
-				}
-			} else {
-				inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-					OfMessage: &responses.EasyInputMessageParam{
-						Role:    responses.EasyInputMessageRoleAssistant,
-						Content: responses.EasyInputMessageContentUnionParam{OfString: openai.Opt(msg.Content)},
-					},
-				})
+				assistantMessage.OfAssistant.ToolCalls = toolCalls
 			}
-		case "tool":
-			inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
-				OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-					CallID: msg.ToolCallID,
-					Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.Opt(msg.Content)},
-					Status: "completed",
+			assistantMessage.OfAssistant.Content.OfString = openai.Opt(msg.Content)
+			chatMessages = append(chatMessages, assistantMessage)
+		case types.RoleTool:
+			// 工具响应消息
+			chatMessages = append(chatMessages, openai.ChatCompletionMessageParamUnion{
+				OfTool: &openai.ChatCompletionToolMessageParam{
+					ToolCallID: msg.ToolCallID,
+					Content: openai.ChatCompletionToolMessageParamContentUnion{
+						OfString: openai.Opt(msg.Content),
+					},
 				},
 			})
 		}
 	}
 
-	params := responses.ResponseNewParams{
-		Model: model,
-		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: inputItems},
+	// 2. 构建参数
+	params := openai.ChatCompletionNewParams{
+		Model:    model,
+		Messages: chatMessages,
 	}
 
-	if instructions != "" {
-		params.Instructions = openai.Opt(instructions)
+	// 3. 可选参数
+	if options.Temperature != nil {
+		params.Temperature = openai.Opt(float64(*options.Temperature))
 	}
-
 	if options.MaxTokens != nil {
-		params.MaxOutputTokens = openai.Opt(*options.MaxTokens)
+		params.MaxTokens = openai.Opt(*options.MaxTokens)
 	}
 
 	if len(options.Tools) > 0 {
-		params.Tools = make([]responses.ToolUnionParam, 0, len(options.Tools))
+		params.Tools = make([]openai.ChatCompletionToolUnionParam, 0, len(options.Tools))
 		for _, tool := range options.Tools {
-			if tool.Type == "function" {
-				params.Tools = append(params.Tools, responses.ToolUnionParam{
-					OfFunction: &responses.FunctionToolParam{
+			params.Tools = append(params.Tools, openai.ChatCompletionToolUnionParam{
+				OfFunction: &openai.ChatCompletionFunctionToolParam{
+					Function: shared.FunctionDefinitionParam{
 						Name:        tool.Function.Name,
-						Parameters:  tool.Function.Parameters,
 						Description: openai.Opt(tool.Function.Description),
+						Parameters:  shared.FunctionParameters(tool.Function.Parameters),
+						Strict:      openai.Opt(true),
 					},
-				})
-			}
-			if tool.Type == "mcp" {
-				// TODO MCP
-			}
+				},
+			})
 		}
 	}
-	// 使用内置联网搜索功能
-	params.Tools = append(params.Tools, responses.ToolParamOfWebSearch("web_search"))
+
 	return params
 }

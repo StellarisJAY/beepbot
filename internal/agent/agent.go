@@ -44,6 +44,7 @@ func NewAgentRun(config config.Config, bus *channel.MessageBus) (*AgentRunner, e
 	toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
 	toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
 	toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
+	toolRegistry.Register(tool.NewEditFileTool(workingDir, config.DataDir))
 	// TODO 任务管理工具
 	toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
 	// 操作系统信息工具
@@ -154,20 +155,23 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		// 上下文
 		messages := contextBuilder.buildContext()
 
-		for _, msg := range messages {
-			fmt.Print(msg.Role + ",")
-		}
-
 		// 调用大模型api
 		response, err := a.model.Chat(ctx, messages, a.modelID, options)
 		if err != nil {
 			slog.Error("model api error", "iteration", iterations, "error", err)
-			continue
+			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
+				Channel:          channelName,
+				UserID:           userID,
+				GroupID:          groupID,
+				Content:          "调用模型失败, 请重试...",
+				MessageType:      channel.TextMessage,
+				InboundMessageID: inboundMsgID,
+			})
+			break
 		}
-		slog.Debug("response from model", "content", response.Content, "usage", response.Usage, "tool_calls", response.ToolCalls)
 
 		// 没有工具调用，直接返回消息
-		if len(response.ToolCalls) == 0 {
+		if response.FinishReason != "tool_calls" {
 			session.AppendMessage(types.Message{
 				Role:    types.RoleAssistant,
 				Content: response.Content,
@@ -209,6 +213,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		}
 		session.AppendMessage(assistantMsg)
 
+		slog.Info("executing tools", "count", len(functionCalls))
 		// 执行工具函数
 		for _, tc := range functionCalls {
 			params := make(map[string]any)
@@ -247,7 +252,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				Content:    result,
 				ToolCallID: tc.ID,
 			}
-			slog.Debug("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "result", result)
+			slog.Info("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "tool_call_id", tc.ID, "args", tc.Function.Arguments, "result", result)
 			// 添加工具调用结果到会话
 			session.AppendMessage(toolMessage)
 		}
