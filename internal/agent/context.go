@@ -1,10 +1,18 @@
 package agent
 
 import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/skill"
 	"github.com/StellarisJAY/beepbot/internal/types"
 )
+
+const memoryFile = "MEMORY.md"
 
 // TODO builtin prompt
 const builtinSystemPrompt = `
@@ -57,6 +65,62 @@ const builtinSystemPrompt = `
 
 </task_management>
 
+<memory_management>
+你可以使用文件系统工具来管理长期记忆，记忆文件位于工作目录下的 MEMORY.md。
+
+## 记忆内容
+以下信息值得记录到记忆中：
+- 用户偏好和习惯（如语言风格、常用工具、工作习惯）
+- 重要决策和结论（如项目配置选择、架构决策）
+- 常用知识和参考信息（如 API 端点、配置模板）
+- 未完成任务和待办事项（跨会话的任务）
+- 项目特定信息（如目录结构、关键文件位置）
+
+## 记忆写入时机
+- 用户明确表达偏好时
+- 做出重要决策后
+- 发现需要长期记住的信息时
+- 任务未完成需要后续继续时
+- 用户要求记住某些信息时
+
+## 渐进式管理
+当 MEMORY.md 内容增长时，采用以下策略：
+
+### 第一阶段：单文件管理 (少量记忆)
+所有记忆保存在 MEMORY.md 中，使用清晰的章节划分：
+    ## 用户偏好
+    - ...
+    ## 项目信息
+    - ...
+    ## 待办事项
+    - ...
+
+### 第二阶段: 分类拆分 (记忆文件溢出)
+当 MEMORY.md 超过 200 行时, 系统将提示记忆文件已经溢出, 你需要将记忆重新分类整理为多个文件:
+- MEMORY.md 作为索引目录
+- memory/preferences.md 存放用户偏好
+- memory/project.md 存放项目信息
+- memory/knowledge.md 存放常用知识
+- memory/tasks.md 存放待办事项
+
+MEMORY.md 索引格式示例：
+    # 记忆索引
+    ## 快速访问
+    - [用户偏好](memory/preferences.md)
+    - [项目信息](memory/project.md)
+    - [常用知识](memory/knowledge.md)
+    - [待办事项](memory/tasks.md)
+    ## 最近更新
+    - YYYY-MM-DD: 更新内容摘要...
+
+## 记忆维护原则
+1. **定期清理**：过时信息及时删除或归档
+2. **简洁记录**：每条记忆控制在 1-3 行
+3. **结构清晰**：使用标题和列表组织内容
+4. **及时更新**：信息变化时立即更新记忆
+5. **避免冗余**：不重复记录相同信息
+</memory_management>
+
 <guidelines>
 智能体行为准则：
 
@@ -89,6 +153,10 @@ const builtinSystemPrompt = `
 - 遇到错误时，分析原因并尝试替代方案
 - 保持任务列表与实际进度同步
 </reminder>
+
+<working_dir>
+   - %s
+</working_dir>
 `
 
 const completionMessage = `
@@ -100,6 +168,9 @@ type contextBuilder struct {
 	skillManager     *skill.Manager
 	session          *session.Session
 	prebuiltMessages []types.Message
+	workingDir       string
+	sharedDataDir    string
+	userInstruction  string
 }
 
 // prebuild 提前构建可以固定的上下文，比如skills,system prompt
@@ -111,7 +182,7 @@ func (b *contextBuilder) prebuild() {
 	b.prebuiltMessages = []types.Message{
 		{
 			Role:    types.RoleSystem,
-			Content: builtinSystemPrompt, // 内置系统提示词
+			Content: fmt.Sprintf(builtinSystemPrompt, b.workingDir), // 内置系统提示词
 		},
 		{
 			Role:    types.RoleSystem,
@@ -125,6 +196,63 @@ func (b *contextBuilder) prebuild() {
 }
 
 func (b *contextBuilder) buildContext() []types.Message {
-	// 历史消息
-	return append(b.prebuiltMessages, b.session.GetHistory()...)
+	messages := b.prebuiltMessages
+
+	// 如果有记忆文件，将前两百行加入到上下文
+	memoryFilePath := filepath.Join(b.workingDir, memoryFile)
+	if memoryContent, overflow, err := readMemoryFile(memoryFilePath, 200); err == nil && memoryContent != "" {
+		messages = append(messages, types.Message{
+			Role:    types.RoleSystem,
+			Content: fmt.Sprintf("<memory>\n\n%s</memory>\n\n<memory_overflow>\n\n%v</memory_overflow>\n\n", memoryContent, overflow),
+		})
+	}
+
+	// 如果有摘要，添加摘要作为上下文
+	summary := b.session.GetSummary()
+	if summary != "" {
+		messages = append(messages, types.Message{
+			Role:    types.RoleSystem,
+			Content: fmt.Sprintf("<conversation_summary>\n\n%s</conversation_summary>\n\n", summary),
+		})
+	}
+
+	// 历史消息（放在当前用户请求之前）
+	messages = append(messages, b.session.GetHistory()...)
+
+	// 当前用户请求（放在历史消息之后）
+	messages = append(messages, types.Message{
+		Content: b.userInstruction,
+		Role:    types.RoleUser,
+	})
+
+	return messages
+}
+
+// readMemoryFile 读取记忆文件的前 maxLines 行
+// 返回: 读取的内容, 是否溢出(超过 maxLines), 错误
+func readMemoryFile(path string, maxLines int) (string, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	lineCount := 0
+
+	for scanner.Scan() {
+		if lineCount < maxLines {
+			lines = append(lines, scanner.Text())
+		}
+		lineCount++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", false, err
+	}
+
+	// 如果总行数超过 maxLines，则表示溢出
+	overflow := lineCount > maxLines
+	return strings.Join(lines, "\n"), overflow, nil
 }

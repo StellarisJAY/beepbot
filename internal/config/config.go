@@ -40,9 +40,11 @@ type AgentConfig struct {
 }
 
 type MemoryConfig struct {
-	WindowSize int                 `json:"window_size"`
-	Flash      *FlashMemoryConfig  `json:"flash,omitempty"`
-	Milvus     *MilvusMemoryConfig `json:"milvus,omitempty"`
+	WindowSize       int                 `json:"window_size"`
+	CompressionRatio float64             `json:"compression_ratio"` // 压缩比例阈值，达到此比例时触发压缩 (0.0-1.0)
+	MaxTokens        int64               `json:"max_tokens"`        // 上下文token限制
+	Flash            *FlashMemoryConfig  `json:"flash,omitempty"`
+	Milvus           *MilvusMemoryConfig `json:"milvus,omitempty"`
 }
 
 type FlashMemoryConfig struct {

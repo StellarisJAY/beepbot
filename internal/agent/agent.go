@@ -20,6 +20,18 @@ import (
 // 工具调用连续出错次数，达到这个次数将提示智能体提前结束或尝试其他方案
 const toolErrorThreshold = 3
 
+// 压缩时保留的最近消息数量
+const compressionKeepCount = 5
+
+// 压缩提示词，用于让 LLM 生成历史消息摘要
+const compressionPrompt = `请将以下对话历史压缩成简洁的摘要，保留关键信息：
+1. 用户的主要请求和目标
+2. 已完成的重要操作和结果
+3. 当前任务状态和待办事项
+4. 重要的上下文信息
+
+摘要应该简洁明了，便于后续对话参考。`
+
 type AgentRunner struct {
 	model          types.LLMProvider
 	bus            *channel.MessageBus
@@ -126,26 +138,29 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		})
 	}
 
-	// 会话中增加用户新发送的消息
-	session.AppendMessage(types.Message{
-		Role:    types.RoleUser,
-		Content: message.Content,
-	})
-
 	// 连续错误工具计数
 	toolErrorCounter := make(map[string]int)
 
 	// 上下文构建器
 	contextBuilder := contextBuilder{
-		systemPrompt: a.config.AgentConfig.SystemPrompt,
-		skillManager: a.skillManager,
-		session:      session,
+		systemPrompt:    a.config.AgentConfig.SystemPrompt, // 用户配置的系统提示词
+		skillManager:    a.skillManager,                    // 技能信息
+		session:         session,                           // 会话信息
+		workingDir:      a.config.AgentConfig.WorkingDir,   // 工作目录
+		userInstruction: message.Content,                   // 用户请求
 	}
+	// 提前构建固定的上下文内容
 	contextBuilder.prebuild()
 
 	// 智能体循环, 加5步来整理总结
 	// TODO 更好的结束策略
 	for iterations := range maxIterations + 5 {
+		// 检查是否需要压缩上下文
+		if session.NeedCompress() {
+			slog.Info("context compression triggered", "sessionKey", session.Key, "tokenUsed", session.GetTokenUsage())
+			a.compressContext(ctx, session)
+		}
+
 		// 如果达到了最大迭代次数，添加一条提示结束任务和记录任务状态的消息
 		if iterations == maxIterations {
 			session.AppendMessage(types.Message{
@@ -173,17 +188,15 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 		}
 
 		// 记录token用量
-		totalTokenUsage.CacheTokens += response.Usage.CacheTokens
-		totalTokenUsage.InputTokens += response.Usage.InputTokens
-		totalTokenUsage.OutputTokens += response.Usage.OutputTokens
-		totalTokenUsage.ReasoningTokens += response.Usage.ReasoningTokens
-		totalTokenUsage.TotalTokens += totalTokenUsage.InputTokens + totalTokenUsage.OutputTokens + totalTokenUsage.ReasoningTokens
+		tokenUsage := response.Usage
+		totalTokenUsage.OutputTokens += tokenUsage.OutputTokens
 
 		// 没有工具调用，直接返回消息
 		if response.FinishReason != "tool_calls" {
 			session.AppendMessage(types.Message{
 				Role:    types.RoleAssistant,
 				Content: response.Content,
+				Usage:   tokenUsage,
 			})
 			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
 				Channel:          channelName,
@@ -219,6 +232,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			Role:      types.RoleAssistant,
 			Content:   response.Content,
 			ToolCalls: functionCalls,
+			Usage:     tokenUsage,
 		}
 		session.AppendMessage(assistantMsg)
 
@@ -261,11 +275,72 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				Content:    result,
 				ToolCallID: tc.ID,
 			}
-			slog.Info("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "tool_call_id", tc.ID, "args", tc.Function.Arguments, "result", result)
+			slog.Info("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "tool_call_id", tc.ID, "args", truncateText(tc.Function.Arguments, 20), "result", truncateText(result, 50))
 			// 添加工具调用结果到会话
 			session.AppendMessage(toolMessage)
 		}
 	}
 
-	slog.Info("agent loop finished", "token_usage", totalTokenUsage)
+	slog.Info("agent loop finished", "output_tokens", totalTokenUsage.OutputTokens, "context_used", session.GetTokenUsage())
+}
+
+// compressContext 压缩会话上下文
+// 1. 获取需要压缩的历史消息
+// 2. 调用 LLM 生成摘要
+// 3. 用摘要替换旧历史
+func (a *AgentRunner) compressContext(ctx context.Context, session *session.Session) {
+	// 获取被移除的消息用于生成摘要
+	removed := session.Compress(compressionKeepCount)
+	if len(removed) == 0 {
+		return
+	}
+
+	// 构建摘要请求
+	var historyText string
+	for _, msg := range removed {
+		switch msg.Role {
+		case types.RoleUser:
+			historyText += fmt.Sprintf("用户: %s\n", msg.Content)
+		case types.RoleAssistant:
+			historyText += fmt.Sprintf("助手: %s\n", msg.Content)
+			// 处理工具调用
+			if len(msg.ToolCalls) > 0 {
+				for _, tc := range msg.ToolCalls {
+					if tc.Function != nil {
+						historyText += fmt.Sprintf("  调用工具: %s, 参数: %s\n",
+							tc.Function.Name,
+							truncateText(tc.Function.Arguments, 200))
+					}
+				}
+			}
+		case types.RoleTool:
+			// 工具结果可能很长，需要截断
+			historyText += fmt.Sprintf("工具结果: %s\n", truncateText(msg.Content, 200))
+		}
+	}
+
+	// 调用 LLM 生成摘要
+	summaryMessages := []types.Message{
+		{Role: types.RoleSystem, Content: compressionPrompt},
+		{Role: types.RoleUser, Content: historyText},
+	}
+
+	response, err := a.model.Chat(ctx, summaryMessages, a.modelID, types.ChatOptions{})
+	if err != nil {
+		slog.Error("failed to generate summary for compression", "error", err)
+		// 压缩失败，但历史已经被清理，继续运行
+		return
+	}
+
+	// 保存摘要到会话
+	session.SetSummary(response.Content)
+	slog.Info("context compressed successfully", "sessionKey", session.Key, "summaryLength", len(response.Content))
+}
+
+// truncateText 截断文本，保留指定最大长度
+func truncateText(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen] + "...[已截断]"
 }

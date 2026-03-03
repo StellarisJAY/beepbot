@@ -43,6 +43,8 @@ type Message struct {
 	ToolCallID   string     `json:"tool_call_id,omitempty"`
 	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 	FinishReason string     `json:"finish_reason,omitempty"`
+
+	Usage *TokenUsage `json:"token_usage,omitempty"`
 }
 
 type ToolDefinition struct {

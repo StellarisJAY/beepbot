@@ -16,7 +16,9 @@
     "working_dir": "/data/workspace"
   },
   "memory": {
-    "window_size": 20,
+    "window_size": 50,
+    "compression_ratio": 0.8,
+    "max_tokens": 900000,
     "flash": {}
   },
   "channel": {
