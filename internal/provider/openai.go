@@ -116,15 +116,31 @@ func buildOpenAICompletionsParams(messages []types.Message, model string, option
 		Model:    model,
 		Messages: chatMessages,
 	}
+	params.SetExtraFields(map[string]any{})
 
 	// 3. 可选参数
+	// 温度
 	if options.Temperature != nil {
 		params.Temperature = openai.Opt(float64(*options.Temperature))
 	}
+	// 最大token数
 	if options.MaxTokens != nil {
 		params.MaxTokens = openai.Opt(*options.MaxTokens)
 	}
+	// thinking
+	if options.Reasoning != nil && *options.Reasoning == true {
+		params.ReasoningEffort = "medium"
+		params.ExtraFields()["enable_thinking"] = true
+	} else {
+		params.ReasoningEffort = "none"
+		params.ExtraFields()["enable_thinking"] = false
+	}
 
+	// 4. 工具
+	// 网络搜索工具
+	params.ExtraFields()["enable_search"] = true
+
+	// 系统内置工具
 	if len(options.Tools) > 0 {
 		params.Tools = make([]openai.ChatCompletionToolUnionParam, 0, len(options.Tools))
 		for _, tool := range options.Tools {
