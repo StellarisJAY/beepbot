@@ -1,13 +1,38 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/StellarisJAY/beepbot/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
+// CORS 中间件
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-Requested-With, Authorization")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers")
+		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("Access-Control-Max-Age", "12 hours")
+
+		// 预检请求直接返回
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // SetupRouter 设置 API 路由
 func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService) *gin.Engine {
 	router := gin.Default()
+
+	// 添加 CORS 中间件
+	router.Use(corsMiddleware())
 
 	// 创建处理器
 	providerHandler := NewProviderHandler(providerService)

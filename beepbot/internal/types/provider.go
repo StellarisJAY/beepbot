@@ -13,6 +13,7 @@ type ProviderType string
 const (
 	ProviderTypeOpenAI    ProviderType = "openai"
 	ProviderTypeDashScope ProviderType = "dashscope"
+	ProviderOllama        ProviderType = "ollama"
 )
 
 // Provider 模型供应商配置
