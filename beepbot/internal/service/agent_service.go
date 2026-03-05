@@ -25,37 +25,37 @@ func NewAgentService(repo repository.AgentRepository, providerService *ProviderS
 
 // CreateAgentRequest 创建智能体请求
 type CreateAgentRequest struct {
-	Name             string   `json:"name" binding:"required"`
-	Description      string   `json:"description"`
-	ProviderID       string   `json:"provider_id" binding:"required"`
-	Model            string   `json:"model" binding:"required"`
-	SystemPrompt     string   `json:"system_prompt"`
-	Temperature      float32  `json:"temperature"`
-	MaxIterations    int      `json:"max_iterations"`
-	MaxTokens        int64    `json:"max_tokens"`
-	WorkingDir       string   `json:"working_dir" binding:"required"`
-	MemoryWindowSize int      `json:"memory_window_size"`
-	EnableShell      bool     `json:"enable_shell"`
-	ForbiddenCmds    []string `json:"forbidden_commands"`
-	ShellTimeout     string   `json:"shell_timeout"`
+	Name              string  `json:"name" binding:"required"`
+	Description       string  `json:"description"`
+	ProviderID        string  `json:"provider_id" binding:"required"`
+	Model             string  `json:"model" binding:"required"`
+	SystemPrompt      string  `json:"system_prompt"`
+	Temperature       float32 `json:"temperature"`
+	MaxIterations     int     `json:"max_iterations"`
+	MaxOutputTokens   int64   `json:"max_output_tokens"`
+	WorkingDir        string  `json:"working_dir" binding:"required"`
+	ContextWindowSize int     `json:"context_window_size"`
+	WindowSize        int     `json:"window_size"`
+	CompressionRatio  float64 `json:"compression_ratio"`
+	ContextMaxTokens  int64   `json:"context_max_tokens"`
 }
 
 // UpdateAgentRequest 更新智能体请求
 type UpdateAgentRequest struct {
-	Name             string            `json:"name"`
-	Description      string            `json:"description"`
-	ProviderID       string            `json:"provider_id"`
-	Model            string            `json:"model"`
-	SystemPrompt     string            `json:"system_prompt"`
-	Temperature      float32           `json:"temperature"`
-	MaxIterations    int               `json:"max_iterations"`
-	MaxTokens        int64             `json:"max_tokens"`
-	WorkingDir       string            `json:"working_dir"`
-	MemoryWindowSize int               `json:"memory_window_size"`
-	EnableShell      bool              `json:"enable_shell"`
-	ForbiddenCmds    []string          `json:"forbidden_commands"`
-	ShellTimeout     string            `json:"shell_timeout"`
-	Status           types.AgentStatus `json:"status"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	ProviderID        string            `json:"provider_id"`
+	Model             string            `json:"model"`
+	SystemPrompt      string            `json:"system_prompt"`
+	Temperature       float32           `json:"temperature"`
+	MaxIterations     int               `json:"max_iterations"`
+	MaxOutputTokens   int64             `json:"max_output_tokens"`
+	WorkingDir        string            `json:"working_dir"`
+	ContextWindowSize int               `json:"context_window_size"`
+	WindowSize        int               `json:"window_size"`
+	CompressionRatio  float64           `json:"compression_ratio"`
+	ContextMaxTokens  int64             `json:"context_max_tokens"`
+	Status            types.AgentStatus `json:"status"`
 }
 
 // CreateChannelRequest 创建渠道绑定请求
@@ -73,25 +73,25 @@ type UpdateChannelRequest struct {
 
 // AgentResponse 智能体响应
 type AgentResponse struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	Description      string            `json:"description"`
-	ProviderID       string            `json:"provider_id"`
-	Provider         *ProviderResponse `json:"provider,omitempty"`
-	Model            string            `json:"model"`
-	SystemPrompt     string            `json:"system_prompt"`
-	Temperature      float32           `json:"temperature"`
-	MaxIterations    int               `json:"max_iterations"`
-	MaxTokens        int64             `json:"max_tokens"`
-	WorkingDir       string            `json:"working_dir"`
-	MemoryWindowSize int               `json:"memory_window_size"`
-	EnableShell      bool              `json:"enable_shell"`
-	ForbiddenCmds    []string          `json:"forbidden_commands"`
-	ShellTimeout     string            `json:"shell_timeout"`
-	Status           types.AgentStatus `json:"status"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
-	Channels         []ChannelResponse `json:"channels,omitempty"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	ProviderID        string            `json:"provider_id"`
+	Provider          *ProviderResponse `json:"provider,omitempty"`
+	Model             string            `json:"model"`
+	SystemPrompt      string            `json:"system_prompt"`
+	Temperature       float32           `json:"temperature"`
+	MaxIterations     int               `json:"max_iterations"`
+	MaxOutputTokens   int64             `json:"max_output_tokens"`
+	WorkingDir        string            `json:"working_dir"`
+	ContextWindowSize int               `json:"context_window_size"`
+	WindowSize        int               `json:"window_size"`
+	CompressionRatio  float64           `json:"compression_ratio"`
+	ContextMaxTokens  int64             `json:"context_max_tokens"`
+	Status            types.AgentStatus `json:"status"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+	Channels          []ChannelResponse `json:"channels,omitempty"`
 }
 
 // ChannelResponse 渠道绑定响应
@@ -116,13 +116,6 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		return nil, errors.New("provider not found")
 	}
 
-	// 处理 ForbiddenCmds
-	var forbiddenCmds datatypes.JSON
-	if req.ForbiddenCmds != nil {
-		data, _ := json.Marshal(req.ForbiddenCmds)
-		forbiddenCmds = data
-	}
-
 	// 设置默认值
 	temperature := req.Temperature
 	if temperature == 0 {
@@ -132,37 +125,45 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 	if maxIterations == 0 {
 		maxIterations = 50
 	}
-	maxTokens := req.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = 4096
+	maxOutputTokens := req.MaxOutputTokens
+	if maxOutputTokens == 0 {
+		maxOutputTokens = 4096
 	}
-	memoryWindowSize := req.MemoryWindowSize
-	if memoryWindowSize == 0 {
-		memoryWindowSize = 20
+	contextWindowSize := req.ContextWindowSize
+	if contextWindowSize == 0 {
+		contextWindowSize = 20
 	}
-	shellTimeout := req.ShellTimeout
-	if shellTimeout == "" {
-		shellTimeout = "30s"
+	windowSize := req.WindowSize
+	if windowSize == 0 {
+		windowSize = 20
+	}
+	compressionRatio := req.CompressionRatio
+	if compressionRatio == 0 {
+		compressionRatio = 0.7
+	}
+	contextMaxTokens := req.ContextMaxTokens
+	if contextMaxTokens == 0 {
+		contextMaxTokens = 4096
 	}
 
 	agent := &types.Agent{
-		ID:               types.GenerateUUIDv7(),
-		Name:             req.Name,
-		Description:      req.Description,
-		ProviderID:       req.ProviderID,
-		Model:            req.Model,
-		SystemPrompt:     req.SystemPrompt,
-		Temperature:      temperature,
-		MaxIterations:    maxIterations,
-		MaxTokens:        maxTokens,
-		WorkingDir:       req.WorkingDir,
-		MemoryWindowSize: memoryWindowSize,
-		EnableShell:      req.EnableShell,
-		ForbiddenCmds:    forbiddenCmds,
-		ShellTimeout:     shellTimeout,
-		Status:           types.AgentStatusActive,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:                types.GenerateUUIDv7(),
+		Name:              req.Name,
+		Description:       req.Description,
+		ProviderID:        req.ProviderID,
+		Model:             req.Model,
+		SystemPrompt:      req.SystemPrompt,
+		Temperature:       temperature,
+		MaxIterations:     maxIterations,
+		MaxOutputTokens:   maxOutputTokens,
+		WorkingDir:        req.WorkingDir,
+		ContextWindowSize: contextWindowSize,
+		WindowSize:        windowSize,
+		CompressionRatio:  compressionRatio,
+		ContextMaxTokens:  contextMaxTokens,
+		Status:            types.AgentStatusActive,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	if err := s.repo.Create(agent); err != nil {
@@ -216,27 +217,28 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 		agent.MaxIterations = req.MaxIterations
 	}
 
-	if req.MaxTokens != 0 {
-		agent.MaxTokens = req.MaxTokens
+	if req.MaxOutputTokens != 0 {
+		agent.MaxOutputTokens = req.MaxOutputTokens
 	}
 
 	if req.WorkingDir != "" {
 		agent.WorkingDir = req.WorkingDir
 	}
 
-	if req.MemoryWindowSize != 0 {
-		agent.MemoryWindowSize = req.MemoryWindowSize
+	if req.ContextWindowSize != 0 {
+		agent.ContextWindowSize = req.ContextWindowSize
 	}
 
-	agent.EnableShell = req.EnableShell
-
-	if req.ForbiddenCmds != nil {
-		data, _ := json.Marshal(req.ForbiddenCmds)
-		agent.ForbiddenCmds = data
+	if req.WindowSize != 0 {
+		agent.WindowSize = req.WindowSize
 	}
 
-	if req.ShellTimeout != "" {
-		agent.ShellTimeout = req.ShellTimeout
+	if req.CompressionRatio != 0 {
+		agent.CompressionRatio = req.CompressionRatio
+	}
+
+	if req.ContextMaxTokens != 0 {
+		agent.ContextMaxTokens = req.ContextMaxTokens
 	}
 
 	if req.Status != "" {
@@ -434,29 +436,24 @@ func (s *AgentService) GetAgentEntityWithProvider(id string) (*types.Agent, erro
 
 // toResponse 转换为响应格式
 func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
-	var forbiddenCmds []string
-	if agent.ForbiddenCmds != nil {
-		_ = json.Unmarshal(agent.ForbiddenCmds, &forbiddenCmds)
-	}
-
 	return &AgentResponse{
-		ID:               agent.ID,
-		Name:             agent.Name,
-		Description:      agent.Description,
-		ProviderID:       agent.ProviderID,
-		Model:            agent.Model,
-		SystemPrompt:     agent.SystemPrompt,
-		Temperature:      agent.Temperature,
-		MaxIterations:    agent.MaxIterations,
-		MaxTokens:        agent.MaxTokens,
-		WorkingDir:       agent.WorkingDir,
-		MemoryWindowSize: agent.MemoryWindowSize,
-		EnableShell:      agent.EnableShell,
-		ForbiddenCmds:    forbiddenCmds,
-		ShellTimeout:     agent.ShellTimeout,
-		Status:           agent.Status,
-		CreatedAt:        agent.CreatedAt,
-		UpdatedAt:        agent.UpdatedAt,
+		ID:                agent.ID,
+		Name:              agent.Name,
+		Description:       agent.Description,
+		ProviderID:        agent.ProviderID,
+		Model:             agent.Model,
+		SystemPrompt:      agent.SystemPrompt,
+		Temperature:       agent.Temperature,
+		MaxIterations:     agent.MaxIterations,
+		MaxOutputTokens:   agent.MaxOutputTokens,
+		WorkingDir:        agent.WorkingDir,
+		ContextWindowSize: agent.ContextWindowSize,
+		WindowSize:        agent.WindowSize,
+		CompressionRatio:  agent.CompressionRatio,
+		ContextMaxTokens:  agent.ContextMaxTokens,
+		Status:            agent.Status,
+		CreatedAt:         agent.CreatedAt,
+		UpdatedAt:         agent.UpdatedAt,
 	}
 }
 
@@ -467,14 +464,6 @@ func (s *AgentService) toResponseWithRelations(agent *types.Agent) *AgentRespons
 	// 添加供应商信息
 	if agent.Provider != nil {
 		response.Provider = s.providerService.toResponse(agent.Provider)
-	}
-
-	// 添加渠道信息
-	if agent.Channels != nil {
-		response.Channels = make([]ChannelResponse, len(agent.Channels))
-		for i, ch := range agent.Channels {
-			response.Channels[i] = *s.channelToResponse(&ch)
-		}
 	}
 
 	return response

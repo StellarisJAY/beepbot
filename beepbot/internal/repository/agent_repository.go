@@ -73,7 +73,7 @@ func (r *agentRepository) GetActiveAgents() ([]types.Agent, error) {
 
 func (r *agentRepository) GetWithRelations(id string) (*types.Agent, error) {
 	var agent types.Agent
-	err := r.db.Preload("Provider").Preload("Channels").
+	err := r.db.Preload("Provider").
 		Where("id = ?", id).First(&agent).Error
 	if err != nil {
 		return nil, err

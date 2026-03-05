@@ -24,8 +24,7 @@ export const useThemeStore = defineStore('theme', () => {
   const isDark = computed(() => themeMode.value === 'dark')
 
   // Ant Design Vue 主题配置
-  const themeConfig = computed<ThemeConfig>(() => ({
-    algorithm: isDark.value ? undefined : undefined, // 使用默认算法，后续可通过 token 自定义
+  const themeConfig = computed(() => ({
     token: {
       colorPrimary: '#1890ff',
       borderRadius: 8,
