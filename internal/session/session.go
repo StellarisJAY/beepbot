@@ -40,7 +40,7 @@ type SessionManager struct {
 	compressionRatio float64
 }
 
-func NewSessionManager(config config.Config) *SessionManager {
+func NewSessionManager(config config.StandaloneConfig) *SessionManager {
 	windowSize := config.MemoryConfig.WindowSize
 	windowSize = max(defaultWindowSize, windowSize)
 

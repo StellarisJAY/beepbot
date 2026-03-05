@@ -19,7 +19,7 @@ import (
 
 type QQBotChannel struct {
 	BaseChannel
-	config config.Config
+	config config.StandaloneConfig
 
 	tokenSource    oauth2.TokenSource
 	api            openapi.OpenAPI
@@ -28,7 +28,7 @@ type QQBotChannel struct {
 	cancel context.CancelFunc
 }
 
-func NewQQBotChannel(config config.Config, bus *MessageBus) Channel {
+func NewQQBotChannel(config config.StandaloneConfig, bus *MessageBus) Channel {
 	return &QQBotChannel{
 		BaseChannel: NewBaseChannel("qq", bus),
 		config:      config,

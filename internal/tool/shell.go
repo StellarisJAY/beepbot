@@ -207,7 +207,7 @@ func (s *ShellTool) Parameters() map[string]any {
 	}
 }
 
-func NewShellTool(config config.Config) Tool {
+func NewShellTool(config config.StandaloneConfig) Tool {
 	shellToolConfig := config.BuiltinTools.Shell
 	timeout, err := time.ParseDuration(shellToolConfig.Timeout)
 	if err != nil {

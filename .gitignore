@@ -9,3 +9,16 @@ go.sum
 logs
 *.db
 config.json
+config_api.json
+cmd/api/.encryption_key
+cmd/api/logs
+cmd/api/*.exe
+cmd/standalone/logs
+cmd/standalone/*.exe
+
+# coding agent's plans
+plans
+
+# build targets
+*.exe
+build

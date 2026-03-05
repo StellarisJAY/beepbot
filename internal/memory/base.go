@@ -11,7 +11,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/types"
 )
 
-func CreateMemoryManager(config config.Config) (types.MemoryManager, error) {
+func CreateMemoryManager(config config.StandaloneConfig) (types.MemoryManager, error) {
 	memoryConfig := config.MemoryConfig
 	switch {
 	case memoryConfig.Flash != nil:

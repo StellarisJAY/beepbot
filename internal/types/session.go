@@ -10,15 +10,17 @@ import (
 type Session struct {
 	ID        string    `gorm:"column:id;type:varchar(64);primaryKey"`
 	Key       string    `gorm:"column:key;type:varchar(255);uniqueIndex;not null"`
+	AgentID   string    `gorm:"column:agent_id;type:varchar(64);not null;index"`
 	Summary   string    `gorm:"column:summary;type:text"`
-	CreatedAt time.Time `gorm:"column:created_at;type:datetime;autoCreateTime"`
-	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime;autoUpdateTime"`
+	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime"`
+	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamptz;autoUpdateTime"`
 }
 
 // BeforeCreate 在创建记录前自动设置ID和时间
 func (s *Session) BeforeCreate(tx *gorm.DB) error {
 	if s.ID == "" {
-		s.ID = uuid.Must(uuid.NewUUID()).String()
+		id, _ := uuid.NewV7()
+		s.ID = id.String()
 	}
 	now := time.Now()
 	if s.CreatedAt.IsZero() {
@@ -36,15 +38,16 @@ type SessionMessage struct {
 	Role         string    `gorm:"column:role;type:varchar(32);not null"`
 	Content      string    `gorm:"column:content;type:text"`
 	ToolCallID   string    `gorm:"column:tool_call_id;type:varchar(64)"`
-	ToolCalls    string    `gorm:"column:tool_calls;type:json"`
+	ToolCalls    string    `gorm:"column:tool_calls;type:jsonb"`
 	FinishReason string    `gorm:"column:finish_reason;type:varchar(32)"`
-	CreatedAt    time.Time `gorm:"column:created_at;type:datetime;autoCreateTime"`
+	CreatedAt    time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime"`
 }
 
 // BeforeCreate 在创建记录前自动设置ID和CreatedAt
 func (m *SessionMessage) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
-		m.ID = uuid.Must(uuid.NewUUID()).String()
+		id, _ := uuid.NewV7()
+		m.ID = id.String()
 	}
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now()

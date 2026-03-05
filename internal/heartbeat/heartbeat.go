@@ -21,7 +21,7 @@ type HeartBeat struct {
 	heartBeatFile string
 }
 
-func NewHeartBeat(config config.Config, onHeartBeat func(ctx context.Context, prompt string)) (*HeartBeat, error) {
+func NewHeartBeat(config config.StandaloneConfig, onHeartBeat func(ctx context.Context, prompt string)) (*HeartBeat, error) {
 	hb := config.HeartBeat
 	interval, err := time.ParseDuration(hb.Interval)
 	if err != nil {

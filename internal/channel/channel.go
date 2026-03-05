@@ -20,7 +20,7 @@ type Channel interface {
 type ChannelManager struct {
 	channels map[string]Channel
 	bus      *MessageBus
-	config   config.Config
+	config   config.StandaloneConfig
 }
 
 type BaseChannel struct {
@@ -29,7 +29,7 @@ type BaseChannel struct {
 	bus       *MessageBus
 }
 
-func NewChannelManager(config config.Config, bus *MessageBus) *ChannelManager {
+func NewChannelManager(config config.StandaloneConfig, bus *MessageBus) *ChannelManager {
 	return &ChannelManager{
 		channels: make(map[string]Channel),
 		bus:      bus,

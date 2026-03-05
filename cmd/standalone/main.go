@@ -25,7 +25,7 @@ func init() {
 	flag.StringVar(&configFile, "config", "config.json", "Path to the config file")
 }
 
-func ensureWorkingDir(config *config.Config) error {
+func ensureWorkingDir(config *config.StandaloneConfig) error {
 	workingDir := config.AgentConfig.WorkingDir
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
@@ -43,7 +43,7 @@ func ensureWorkingDir(config *config.Config) error {
 	return nil
 }
 
-func ensureDataDir(config *config.Config) error {
+func ensureDataDir(config *config.StandaloneConfig) error {
 	dataDir := config.DataDir
 	dataDir = strings.TrimSpace(dataDir)
 	if dataDir == "" {
@@ -64,7 +64,7 @@ func ensureDataDir(config *config.Config) error {
 func main() {
 	flag.Parse()
 	// 加载配置文件
-	config, err := config.FromConfigFile(configFile)
+	config, err := config.FromConfigFile[config.StandaloneConfig](configFile)
 	if err != nil {
 		panic(err)
 	}
@@ -97,7 +97,7 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	// 创建智能体运行器
-	agentRun, err := agent.NewAgentRun(*config, messageBus)
+	agentRun, err := agent.NewStandaloneRun(*config, messageBus)
 	if err != nil {
 		panic(err)
 	}

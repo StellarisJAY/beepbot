@@ -1,6 +1,38 @@
 package types
 
-import "context"
+import (
+	"context"
+	"time"
+
+	"gorm.io/datatypes"
+)
+
+// ProviderType 供应商类型
+type ProviderType string
+
+const (
+	ProviderTypeOpenAI    ProviderType = "openai"
+	ProviderTypeDashScope ProviderType = "dashscope"
+)
+
+// Provider 模型供应商配置
+type Provider struct {
+	ID           string         `json:"id" gorm:"column:id;primaryKey;type:varchar(64)"`
+	Name         string         `json:"name" gorm:"column:name;type:varchar(128);not null;uniqueIndex"`
+	ProviderType ProviderType   `json:"provider_type" gorm:"column:provider_type;type:varchar(32);not null;index"`
+	APIKey       string         `json:"-" gorm:"column:api_key;type:varchar(512);not null"` // 加密存储，不输出到 JSON
+	APIKeyMasked string         `json:"api_key_masked" gorm:"-"`                            // 脱敏显示，仅用于 API 响应
+	BaseURL      string         `json:"base_url" gorm:"column:base_url;type:varchar(512)"`
+	ExtraConfig  datatypes.JSON `json:"extra_config" gorm:"column:extra_config;type:jsonb"`
+	IsDefault    bool           `json:"is_default" gorm:"column:is_default;type:boolean;default:false"`
+	CreatedAt    time.Time      `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt    time.Time      `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
+}
+
+// TableName 指定表名
+func (Provider) TableName() string {
+	return "providers"
+}
 
 const (
 	RoleSystem    string = "system"

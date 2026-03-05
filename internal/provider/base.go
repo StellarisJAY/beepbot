@@ -18,7 +18,7 @@ type BaseProvider struct {
 	defaultModel string
 }
 
-func CreateLLMProvider(config config.Config) (types.LLMProvider, error) {
+func CreateLLMProvider(config config.StandaloneConfig) (types.LLMProvider, error) {
 	provider := strings.ToLower(config.AgentConfig.Provider)
 	model := config.AgentConfig.Model
 
