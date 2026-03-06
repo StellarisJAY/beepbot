@@ -1,52 +1,131 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { PlusOutlined, EditOutlined, DeleteOutlined, RobotOutlined } from '@ant-design/icons-vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { message, Modal } from 'ant-design-vue'
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  RobotOutlined,
+  FileTextOutlined,
+  LineChartOutlined,
+} from '@ant-design/icons-vue'
+import { agentApi } from '@/api/agent'
+import type { Agent } from '@/types/agent'
+import { AgentStatus } from '@/types/agent'
+import AgentCreateModal from '@/components/AgentCreateModal.vue'
 
-// 模拟数据
-const agents = ref([
-  {
-    id: '1',
-    name: '默认智能体',
-    description: '基于 Qwen3.5 的通用智能助手，支持多轮对话和工具调用',
-    model: 'qwen3.5-plus',
-    provider: 'dashscope',
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: '代码助手',
-    description: '专注于代码编写和调试的智能助手',
-    model: 'gpt-4o',
-    provider: 'openai',
-    status: 'active',
-  },
-  {
-    id: '3',
-    name: '文档助手',
-    description: '帮助用户处理文档、撰写报告的智能助手',
-    model: 'qwen3.5-plus',
-    provider: 'dashscope',
-    status: 'inactive',
-  },
-])
+const router = useRouter()
+
+// 数据
+const agents = ref<Agent[]>([])
+const loading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const size = ref(10)
+
+// 弹窗
+const createModalVisible = ref(false)
+
+// 获取智能体列表
+const fetchAgents = async () => {
+  loading.value = true
+  try {
+    const res = await agentApi.list(page.value, size.value)
+    agents.value = res.data
+    total.value = res.total
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || '获取智能体列表失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 新建智能体
 const handleCreate = () => {
-  // TODO: 打开创建智能体弹窗
-  console.log('创建智能体')
+  createModalVisible.value = true
+}
+
+// 创建成功后跳转编辑页
+const handleCreateSuccess = (id: string) => {
+  router.push(`/agents/${id}/edit`)
 }
 
 // 编辑智能体
 const handleEdit = (id: string) => {
-  // TODO: 打开编辑智能体弹窗
-  console.log('编辑智能体:', id)
+  router.push(`/agents/${id}/edit`)
+}
+
+// 查看日志
+const handleLogs = (id: string) => {
+  router.push(`/agents/${id}/logs`)
+}
+
+// 查看监测
+const handleMonitor = (id: string) => {
+  router.push(`/agents/${id}/monitor`)
 }
 
 // 删除智能体
-const handleDelete = (id: string) => {
-  // TODO: 确认删除
-  console.log('删除智能体:', id)
+const handleDelete = (agent: Agent) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除智能体「${agent.name}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        await agentApi.delete(agent.id)
+        message.success('删除成功')
+        await fetchAgents()
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        message.error(err.message || '删除失败')
+      }
+    },
+  })
 }
+
+// 切换状态
+const handleToggleStatus = async (agent: Agent) => {
+  // 如果要启用，先校验配置是否完整
+  if (agent.status !== AgentStatus.Active) {
+    try {
+      const validateRes = await agentApi.validate(agent.id)
+      if (!validateRes.data.valid) {
+        message.warning(`配置不完整: ${validateRes.data.errors.join(', ')}`)
+        return
+      }
+    } catch (error: unknown) {
+      const err = error as { message?: string }
+      message.error(err.message || '校验失败')
+      return
+    }
+  }
+
+  const newStatus = agent.status === AgentStatus.Active ? AgentStatus.Inactive : AgentStatus.Active
+  try {
+    await agentApi.updateStatus(agent.id, newStatus)
+    message.success('状态更新成功')
+    await fetchAgents()
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || '状态更新失败')
+  }
+}
+
+// 分页变化
+const handlePageChange = (p: number, s: number) => {
+  page.value = p
+  size.value = s
+  fetchAgents()
+}
+
+onMounted(() => {
+  fetchAgents()
+})
 </script>
 
 <template>
@@ -59,49 +138,76 @@ const handleDelete = (id: string) => {
       </a-button>
     </div>
 
-    <div class="card-grid">
-      <a-card v-for="agent in agents" :key="agent.id" class="agent-card" hoverable>
-        <template #title>
-          <div class="card-title">
-            <RobotOutlined class="card-icon" />
-            <span>{{ agent.name }}</span>
+    <a-spin :spinning="loading">
+      <div class="card-grid" v-if="agents.length > 0">
+        <a-card v-for="agent in agents" :key="agent.id" class="agent-card" hoverable>
+          <template #title>
+            <div class="card-title">
+              <RobotOutlined class="card-icon" />
+              <span>{{ agent.name }}</span>
+            </div>
+          </template>
+          <template #extra>
+            <a-switch
+              :checked="agent.status === AgentStatus.Active"
+              checked-children="启用"
+              un-checked-children="禁用"
+              @change="handleToggleStatus(agent)"
+            />
+          </template>
+          <p class="card-description">{{ agent.description || '暂无描述' }}</p>
+          <div class="card-meta">
+            <div class="meta-item">
+              <span class="meta-label">模型:</span>
+              <span class="meta-value">{{ agent.model || '未配置' }}</span>
+            </div>
           </div>
-        </template>
-        <template #extra>
-          <a-tag :color="agent.status === 'active' ? 'green' : 'default'">
-            {{ agent.status === 'active' ? '运行中' : '已停止' }}
-          </a-tag>
-        </template>
-        <p class="card-description">{{ agent.description }}</p>
-        <div class="card-meta">
-          <span class="meta-item">
-            <span class="meta-label">模型:</span>
-            <span class="meta-value">{{ agent.model }}</span>
-          </span>
-          <span class="meta-item">
-            <span class="meta-label">供应商:</span>
-            <span class="meta-value">{{ agent.provider }}</span>
-          </span>
-        </div>
-        <template #actions>
-          <a-tooltip title="编辑">
-            <EditOutlined @click="handleEdit(agent.id)" />
-          </a-tooltip>
-          <a-tooltip title="删除">
-            <DeleteOutlined @click="handleDelete(agent.id)" />
-          </a-tooltip>
-        </template>
-      </a-card>
-    </div>
+          <template #actions>
+            <a-tooltip title="编辑">
+              <EditOutlined @click="handleEdit(agent.id)" />
+            </a-tooltip>
+            <a-tooltip title="日志">
+              <FileTextOutlined @click="handleLogs(agent.id)" />
+            </a-tooltip>
+            <a-tooltip title="监测">
+              <LineChartOutlined @click="handleMonitor(agent.id)" />
+            </a-tooltip>
+            <a-tooltip title="删除">
+              <DeleteOutlined @click="handleDelete(agent)" />
+            </a-tooltip>
+          </template>
+        </a-card>
+      </div>
 
-    <a-empty v-if="agents.length === 0" description="暂无智能体，点击上方按钮创建" />
+      <a-empty v-else description="暂无智能体，点击上方按钮创建" />
+
+      <!-- 分页 -->
+      <div class="pagination-container" v-if="total > size">
+        <a-pagination
+          v-model:current="page"
+          v-model:pageSize="size"
+          :total="total"
+          :show-size-changer="true"
+          :show-quick-jumper="true"
+          :show-total="(t: number) => `共 ${t} 条`"
+          @change="handlePageChange"
+        />
+      </div>
+    </a-spin>
+
+    <!-- 创建弹窗 -->
+    <AgentCreateModal
+      v-model:visible="createModalVisible"
+      @success="handleCreateSuccess"
+    />
   </div>
 </template>
 
 <style scoped>
 .page-container {
   padding: 24px;
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .page-header {
@@ -167,6 +273,7 @@ const handleDelete = (id: string) => {
   font-size: 14px;
   line-height: 1.6;
   margin-bottom: 12px;
+  min-height: 44px;
 }
 
 .card-meta {
@@ -187,5 +294,11 @@ const handleDelete = (id: string) => {
 
 .meta-value {
   color: var(--text-secondary);
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
 }
 </style>

@@ -26,21 +26,23 @@ const themeStore = useThemeStore()
 
 <style scoped>
 .app-layout {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background-color: var(--bg-color);
   transition: background-color 0.3s ease;
 }
 
 .main-layout {
+  height: 100%;
   background-color: var(--bg-color);
   transition: background-color 0.3s ease;
 }
 
 .main-content {
   margin: 0;
-  min-height: calc(100vh - var(--header-height));
+  height: calc(100vh - var(--header-height));
   background-color: var(--bg-color);
-  overflow: auto;
+  overflow: hidden;
   transition: background-color 0.3s ease;
 }
 

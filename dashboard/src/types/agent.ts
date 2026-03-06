@@ -57,18 +57,41 @@ export interface Agent {
 }
 
 /**
- * 创建智能体请求
+ * 智能体默认配置
+ */
+export interface AgentDefaults {
+  system_prompt: string
+  temperature: number
+  max_iterations: number
+  max_output_tokens: number
+  context_window_size: number
+  window_size: number
+  compression_ratio: number
+  context_max_tokens: number
+}
+
+/**
+ * 校验结果
+ */
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
+/**
+ * 创建智能体请求（简化版，只需名称和描述）
  */
 export interface CreateAgentRequest {
   name: string
   description?: string
-  provider_id: string
-  model: string
+  // 以下字段可选，创建时可留空
+  provider_id?: string
+  model?: string
   system_prompt?: string
+  working_dir?: string
   temperature?: number
   max_iterations?: number
   max_output_tokens?: number
-  working_dir: string
   context_window_size?: number
   window_size?: number
   compression_ratio?: number

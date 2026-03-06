@@ -43,7 +43,7 @@ func InitDatabase(cfg config.DatabaseConfig, loggingConfig config.Logging) (*gor
 	err = db.AutoMigrate(
 		&types.Provider{},
 		&types.Agent{},
-		&types.AgentChannel{},
+		&types.Bot{},
 		&types.Session{},
 		&types.SessionMessage{},
 	)

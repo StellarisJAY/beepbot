@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
@@ -35,11 +36,31 @@ type AgentRunner struct {
 	model          types.LLMProvider
 	bus            *channel.MessageBus
 	sessionManager *session.SessionManager
-	config         config.StandaloneConfig
 	tools          *tool.ToolRegistry
 	skillManager   *skill.Manager
 	modelID        string
+
+	maxIterations int
+	systemPrompt  string
+	workingDir    string
+
+	onMessageRecv        MessageRecvHook
+	onChatCompletion     ChatCompletionHook
+	onContextCompression ContextCompressionHook
+	onToolUsage          ToolUsageHook
+	onLoopFinish         LoopFinishHook
 }
+
+type StandaloneAgentRunner struct {
+	AgentRunner
+	config config.StandaloneConfig
+}
+
+type MessageRecvHook func(message channel.InboundMessage)
+type ChatCompletionHook func(response types.LLMResponse)
+type ContextCompressionHook func()
+type ToolUsageHook func(tool types.ToolCall, result string, err error, duration time.Duration)
+type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
 
 // MessageLoop 核心消息消费循环
 func (a *AgentRunner) MessageLoop(ctx context.Context) {
@@ -61,6 +82,9 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 			}
 			sessionKey = session.GetSessionKey(message.Channel, message.GroupID, message.UserID)
 			session := a.sessionManager.GetOrCreateSession(sessionKey)
+			if a.onMessageRecv != nil {
+				a.onMessageRecv(message)
+			}
 			// 创建智能体循环gorountine处理消息
 			go a.agentLoop(ctx, session, message)
 		}
@@ -69,7 +93,7 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 
 func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, message channel.InboundMessage) {
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
-	maxIterations := a.config.AgentConfig.MaxIterations
+	maxIterations := a.maxIterations
 
 	totalTokenUsage := types.TokenUsage{}
 
@@ -100,20 +124,26 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 
 	// 上下文构建器
 	contextBuilder := contextBuilder{
-		systemPrompt:    a.config.AgentConfig.SystemPrompt, // 用户配置的系统提示词
-		skillManager:    a.skillManager,                    // 技能信息
-		session:         session,                           // 会话信息
-		workingDir:      a.config.AgentConfig.WorkingDir,   // 工作目录
-		userInstruction: message.Content,                   // 用户请求
+		systemPrompt:    a.systemPrompt,  // 用户配置的系统提示词
+		skillManager:    a.skillManager,  // 技能信息
+		session:         session,         // 会话信息
+		workingDir:      a.workingDir,    // 工作目录
+		userInstruction: message.Content, // 用户请求
 	}
 	// 提前构建固定的上下文内容
 	contextBuilder.prebuild()
 
+	iterationCount := 1
+
 	// 智能体循环, 加5步来整理总结
 	// TODO 更好的结束策略
 	for iterations := range maxIterations + 5 {
+		iterationCount++
 		// 检查是否需要压缩上下文
 		if session.NeedCompress() {
+			if a.onContextCompression != nil {
+				a.onContextCompression()
+			}
 			slog.Info("context compression triggered", "sessionKey", session.Key, "tokenUsed", session.GetTokenUsage())
 			a.compressContext(ctx, session)
 		}
@@ -142,6 +172,10 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				InboundMessageID: inboundMsgID,
 			})
 			break
+		}
+
+		if a.onChatCompletion != nil {
+			a.onChatCompletion(*response)
 		}
 
 		// 记录token用量
@@ -206,6 +240,10 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID)
 			}
 
+			if a.onToolUsage != nil {
+				a.onToolUsage(tc, result, err, time.Second)
+			}
+
 			if err != nil {
 				// 返回错误结果
 				toolMessage := types.Message{
@@ -239,6 +277,9 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	}
 
 	slog.Info("agent loop finished", "output_tokens", totalTokenUsage.OutputTokens, "context_used", session.GetTokenUsage())
+	if a.onLoopFinish != nil {
+		a.onLoopFinish(iterationCount, totalTokenUsage)
+	}
 }
 
 // compressContext 压缩会话上下文

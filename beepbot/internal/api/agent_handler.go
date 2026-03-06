@@ -147,89 +147,6 @@ func (h *AgentHandler) UpdateAgentStatus(c *gin.Context) {
 	Success(c, nil)
 }
 
-// GetChannels 获取智能体的渠道绑定
-// GET /api/v1/agents/:id/channels
-func (h *AgentHandler) GetChannels(c *gin.Context) {
-	agentID := c.Param("id")
-	if agentID == "" {
-		BadRequest(c, "agent id is required")
-		return
-	}
-
-	channels, err := h.service.GetChannelsByAgent(agentID)
-	if err != nil {
-		Error(c, 500, "failed to get channels: "+err.Error())
-		return
-	}
-
-	Success(c, channels)
-}
-
-// CreateChannel 创建渠道绑定
-// POST /api/v1/agents/:id/channels
-func (h *AgentHandler) CreateChannel(c *gin.Context) {
-	agentID := c.Param("id")
-	if agentID == "" {
-		BadRequest(c, "agent id is required")
-		return
-	}
-
-	var req service.CreateChannelRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		BadRequest(c, "invalid request: "+err.Error())
-		return
-	}
-
-	channel, err := h.service.CreateChannel(agentID, &req)
-	if err != nil {
-		Error(c, 500, "failed to create channel: "+err.Error())
-		return
-	}
-
-	Success(c, channel)
-}
-
-// UpdateChannel 更新渠道绑定
-// PUT /api/v1/agents/:id/channels/:channelId
-func (h *AgentHandler) UpdateChannel(c *gin.Context) {
-	channelID := c.Param("channelId")
-	if channelID == "" {
-		BadRequest(c, "channel id is required")
-		return
-	}
-
-	var req service.UpdateChannelRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		BadRequest(c, "invalid request: "+err.Error())
-		return
-	}
-
-	channel, err := h.service.UpdateChannel(channelID, &req)
-	if err != nil {
-		Error(c, 500, "failed to update channel: "+err.Error())
-		return
-	}
-
-	Success(c, channel)
-}
-
-// DeleteChannel 删除渠道绑定
-// DELETE /api/v1/agents/:id/channels/:channelId
-func (h *AgentHandler) DeleteChannel(c *gin.Context) {
-	channelID := c.Param("channelId")
-	if channelID == "" {
-		BadRequest(c, "channel id is required")
-		return
-	}
-
-	if err := h.service.DeleteChannel(channelID); err != nil {
-		Error(c, 500, "failed to delete channel: "+err.Error())
-		return
-	}
-
-	Success(c, nil)
-}
-
 // GetActiveAgents 获取所有活跃的智能体
 // GET /api/v1/agents/active
 func (h *AgentHandler) GetActiveAgents(c *gin.Context) {
@@ -240,4 +157,30 @@ func (h *AgentHandler) GetActiveAgents(c *gin.Context) {
 	}
 
 	Success(c, agents)
+}
+
+// GetAgentDefaults 获取智能体默认配置
+// GET /api/v1/agents/defaults
+func (h *AgentHandler) GetAgentDefaults(c *gin.Context) {
+	defaults := h.service.GetAgentDefaults()
+	Success(c, defaults)
+}
+
+// ValidateAgent 校验智能体配置是否完整
+// POST /api/v1/agents/:id/validate
+func (h *AgentHandler) ValidateAgent(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		BadRequest(c, "agent id is required")
+		return
+	}
+
+	agent, err := h.service.GetAgent(id)
+	if err != nil {
+		NotFound(c, "agent not found")
+		return
+	}
+
+	result := h.service.ValidateAgentConfig(agent)
+	Success(c, result)
 }

@@ -292,7 +292,8 @@ onMounted(() => {
 <style scoped>
 .page-container {
   padding: 24px;
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .page-header {

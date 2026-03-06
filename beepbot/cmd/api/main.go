@@ -70,13 +70,15 @@ func main() {
 	// 初始化仓储层
 	providerRepo := repository.NewProviderRepository(db)
 	agentRepo := repository.NewAgentRepository(db)
+	botRepo := repository.NewBotRepository(db)
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
 	agentService := service.NewAgentService(agentRepo, providerService)
+	botService := service.NewBotService(botRepo, agentService)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService)
+	router := api.SetupRouter(providerService, agentService, botService)
 
 	// 确定 API 端口
 	port := cfg.Port

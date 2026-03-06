@@ -19,32 +19,45 @@ import (
 
 type QQBotChannel struct {
 	BaseChannel
-	config config.StandaloneConfig
 
 	tokenSource    oauth2.TokenSource
 	api            openapi.OpenAPI
 	sessionManager botgo.SessionManager
 
 	cancel context.CancelFunc
+
+	appID     string
+	appSecret string
 }
 
-func NewQQBotChannel(config config.StandaloneConfig, bus *MessageBus) Channel {
+// NewQQBotChannelFromConfig 在standalone模式下从配置文件创建Channel
+func NewQQBotChannelFromConfig(config config.StandaloneConfig, bus *MessageBus) Channel {
 	return &QQBotChannel{
-		BaseChannel: NewBaseChannel("qq", bus),
-		config:      config,
+		BaseChannel: NewBaseChannel("qq/standalone", bus),
+		appID:       config.ChannelConfig.QQ.AppID,
+		appSecret:   config.ChannelConfig.QQ.AppSecret,
+	}
+}
+
+// NewQQBotChannel 在api模式下通过channel的配置创建
+func NewQQBotChannel(appId, appSecret string, id string, bus *MessageBus) Channel {
+	channelID := fmt.Sprintf("QQ/%s", id)
+	return &QQBotChannel{
+		BaseChannel: NewBaseChannel(channelID, bus),
+		appID:       appId,
+		appSecret:   appSecret,
 	}
 }
 
 func (c *QQBotChannel) Start(ctx context.Context) error {
-	config := c.config.ChannelConfig.QQ
-	if config.AppID == "" || config.AppSecret == "" {
+	if c.appID == "" || c.appSecret == "" {
 		return errors.New("must provide AppID and AppSecret")
 	}
 
 	// 创建机器人token
 	c.tokenSource = token.NewQQBotTokenSource(&token.QQBotCredentials{
-		AppID:     config.AppID,
-		AppSecret: config.AppSecret,
+		AppID:     c.appID,
+		AppSecret: c.appSecret,
 	})
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -55,7 +68,7 @@ func (c *QQBotChannel) Start(ctx context.Context) error {
 		return fmt.Errorf("start qq channel failed, start refresh token error: %w", err)
 	}
 
-	c.api = botgo.NewOpenAPI(config.AppID, c.tokenSource)
+	c.api = botgo.NewOpenAPI(c.appID, c.tokenSource)
 
 	// 注册消息回调
 	intent := event.RegisterHandlers(

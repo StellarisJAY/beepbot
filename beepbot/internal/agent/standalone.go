@@ -42,11 +42,13 @@ func NewStandaloneRun(config config.StandaloneConfig, bus *channel.MessageBus) (
 	agentRun := &AgentRunner{
 		model:          llmProvider,
 		sessionManager: sessionManager,
-		config:         config,
 		bus:            bus,
 		tools:          toolRegistry,
 		skillManager:   skillManager,
 		modelID:        modelID,
+		systemPrompt:   config.AgentConfig.SystemPrompt,
+		maxIterations:  config.AgentConfig.MaxIterations,
+		workingDir:     config.AgentConfig.WorkingDir,
 	}
 	return agentRun, nil
 }

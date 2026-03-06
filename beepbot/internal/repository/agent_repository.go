@@ -20,24 +20,6 @@ type AgentRepository interface {
 
 	// GetWithRelations 获取智能体及其关联数据
 	GetWithRelations(id string) (*types.Agent, error)
-
-	// GetByChannel 根据渠道类型和标识获取智能体
-	GetByChannel(channelType, channelIdentifier string) (*types.Agent, error)
-
-	// CreateChannel 创建渠道绑定
-	CreateChannel(channel *types.AgentChannel) error
-
-	// UpdateChannel 更新渠道绑定
-	UpdateChannel(channel *types.AgentChannel) error
-
-	// DeleteChannel 删除渠道绑定
-	DeleteChannel(id string) error
-
-	// GetChannelByID 根据ID获取渠道绑定
-	GetChannelByID(id string) (*types.AgentChannel, error)
-
-	// GetChannelsByAgent 获取智能体的所有渠道绑定
-	GetChannelsByAgent(agentID string) ([]types.AgentChannel, error)
 }
 
 type agentRepository struct {
@@ -73,49 +55,9 @@ func (r *agentRepository) GetActiveAgents() ([]types.Agent, error) {
 
 func (r *agentRepository) GetWithRelations(id string) (*types.Agent, error) {
 	var agent types.Agent
-	err := r.db.Preload("Provider").
-		Where("id = ?", id).First(&agent).Error
+	err := r.db.Where("id = ?", id).First(&agent).Error
 	if err != nil {
 		return nil, err
 	}
 	return &agent, nil
-}
-
-func (r *agentRepository) GetByChannel(channelType, channelIdentifier string) (*types.Agent, error) {
-	var agent types.Agent
-	err := r.db.Joins("JOIN agent_channels ON agents.id = agent_channels.agent_id").
-		Where("agent_channels.channel_type = ? AND agent_channels.channel_identifier = ?",
-			channelType, channelIdentifier).
-		First(&agent).Error
-	if err != nil {
-		return nil, err
-	}
-	return &agent, nil
-}
-
-func (r *agentRepository) CreateChannel(channel *types.AgentChannel) error {
-	return r.db.Create(channel).Error
-}
-
-func (r *agentRepository) UpdateChannel(channel *types.AgentChannel) error {
-	return r.db.Save(channel).Error
-}
-
-func (r *agentRepository) DeleteChannel(id string) error {
-	return r.db.Where("id = ?", id).Delete(&types.AgentChannel{}).Error
-}
-
-func (r *agentRepository) GetChannelByID(id string) (*types.AgentChannel, error) {
-	var channel types.AgentChannel
-	err := r.db.Where("id = ?", id).First(&channel).Error
-	if err != nil {
-		return nil, err
-	}
-	return &channel, nil
-}
-
-func (r *agentRepository) GetChannelsByAgent(agentID string) ([]types.AgentChannel, error) {
-	var channels []types.AgentChannel
-	err := r.db.Where("agent_id = ?", agentID).Find(&channels).Error
-	return channels, err
 }

@@ -69,7 +69,7 @@ func (c *ChannelManager) InitChannels(ctx context.Context, config config.Channel
 	c.channels["system"] = newSystemChannel()
 	// qq机器人消息通道
 	if config.QQ != nil {
-		qqBotChannel := NewQQBotChannel(c.config, c.bus)
+		qqBotChannel := NewQQBotChannelFromConfig(c.config, c.bus)
 		c.channels[qqBotChannel.ID()] = qqBotChannel
 	}
 

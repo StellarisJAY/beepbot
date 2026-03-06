@@ -13,6 +13,37 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '智能体' },
   },
   {
+    path: '/agents/:id',
+    component: () => import('@/views/agents/AgentDetailLayout.vue'),
+    children: [
+      {
+        path: '',
+        redirect: (to) => `/agents/${to.params.id}/edit`,
+      },
+      {
+        path: 'edit',
+        name: 'AgentEdit',
+        components: {
+          default: () => import('@/views/agents/AgentConfig.vue'),
+          header: () => import('@/views/agents/AgentConfig.vue'),
+        },
+        meta: { title: '编辑智能体' },
+      },
+      {
+        path: 'logs',
+        name: 'AgentLogs',
+        component: () => import('@/views/agents/AgentLogs.vue'),
+        meta: { title: '智能体日志' },
+      },
+      {
+        path: 'monitor',
+        name: 'AgentMonitor',
+        component: () => import('@/views/agents/AgentMonitor.vue'),
+        meta: { title: '智能体使用监测' },
+      },
+    ],
+  },
+  {
     path: '/providers',
     name: 'Providers',
     component: () => import('@/views/providers/ProviderList.vue'),

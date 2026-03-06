@@ -1,57 +1,135 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { PlusOutlined, EditOutlined, DeleteOutlined, MessageOutlined } from '@ant-design/icons-vue'
+import { ref, onMounted } from 'vue'
+import { message, Modal } from 'ant-design-vue'
+import { PlusOutlined, EditOutlined, DeleteOutlined, MessageOutlined, LinkOutlined } from '@ant-design/icons-vue'
+import { botApi } from '@/api/bot'
+import { agentApi } from '@/api/agent'
+import type { Bot, CreateBotRequest, UpdateBotRequest, BindAgentRequest } from '@/types/bot'
+import { BotStatus, BotStatusLabels, BotPlatformLabels } from '@/types/bot'
+import type { Agent } from '@/types/agent'
+import BotFormModal from '@/components/BotFormModal.vue'
 
-// 模拟数据
-const bots = ref([
-  {
-    id: '1',
-    name: 'QQ 官方机器人',
-    platform: 'qq',
-    appId: '1024xxxxx',
-    status: 'active',
-    description: '通过 QQ 机器人 API 提供服务',
-  },
-  {
-    id: '2',
-    name: '控制台机器人',
-    platform: 'console',
-    appId: '-',
-    status: 'active',
-    description: '通过命令行控制台进行交互',
-  },
-])
+// 数据
+const bots = ref<Bot[]>([])
+const agents = ref<Agent[]>([])
+const loading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const size = ref(10)
 
-// 平台名称映射
-const platformNames: Record<string, string> = {
-  qq: 'QQ',
-  console: '控制台',
-  discord: 'Discord',
-  telegram: 'Telegram',
+// 弹窗相关
+const formModalVisible = ref(false)
+const bindModalVisible = ref(false)
+const editingBot = ref<Bot | null>(null)
+const selectedAgentId = ref<string | null>(null)
+const bindingBotId = ref<string | null>(null)
+
+// 获取机器人列表
+const fetchBots = async () => {
+  loading.value = true
+  try {
+    const res = await botApi.list(page.value, size.value)
+    bots.value = res.data
+    total.value = res.total
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || '获取机器人列表失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-// 平台颜色映射
-const platformColors: Record<string, string> = {
-  qq: 'blue',
-  console: 'green',
-  discord: 'purple',
-  telegram: 'cyan',
+// 获取智能体列表（用于绑定）
+const fetchAgents = async () => {
+  try {
+    const res = await agentApi.list(1, 100)
+    agents.value = res.data
+  } catch (error: unknown) {
+    console.error('获取智能体列表失败:', error)
+  }
 }
 
 // 新建机器人
 const handleCreate = () => {
-  console.log('创建机器人')
+  editingBot.value = null
+  formModalVisible.value = true
 }
 
 // 编辑机器人
-const handleEdit = (id: string) => {
-  console.log('编辑机器人:', id)
+const handleEdit = (bot: Bot) => {
+  editingBot.value = bot
+  formModalVisible.value = true
 }
 
 // 删除机器人
-const handleDelete = (id: string) => {
-  console.log('删除机器人:', id)
+const handleDelete = (bot: Bot) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除机器人「${bot.name}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        await botApi.delete(bot.id)
+        message.success('删除成功')
+        await fetchBots()
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        message.error(err.message || '删除失败')
+      }
+    },
+  })
 }
+
+// 打开绑定智能体弹窗
+const handleBindAgent = (bot: Bot) => {
+  bindingBotId.value = bot.id
+  selectedAgentId.value = bot.agent_id
+  bindModalVisible.value = true
+}
+
+// 确认绑定智能体
+const confirmBindAgent = async () => {
+  if (!bindingBotId.value) return
+
+  try {
+    const data: BindAgentRequest = {
+      agent_id: selectedAgentId.value,
+    }
+    await botApi.bindAgent(bindingBotId.value, data)
+    message.success('绑定成功')
+    bindModalVisible.value = false
+    await fetchBots()
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || '绑定失败')
+  }
+}
+
+// 表单提交成功
+const handleFormSuccess = async () => {
+  formModalVisible.value = false
+  await fetchBots()
+}
+
+// 切换状态
+const handleToggleStatus = async (bot: Bot) => {
+  const newStatus = bot.status === BotStatus.Active ? BotStatus.Inactive : BotStatus.Active
+  try {
+    await botApi.updateStatus(bot.id, newStatus)
+    message.success('状态更新成功')
+    await fetchBots()
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || '状态更新失败')
+  }
+}
+
+onMounted(() => {
+  fetchBots()
+  fetchAgents()
+})
 </script>
 
 <template>
@@ -64,51 +142,116 @@ const handleDelete = (id: string) => {
       </a-button>
     </div>
 
-    <div class="card-grid">
-      <a-card v-for="bot in bots" :key="bot.id" class="bot-card" hoverable>
-        <template #title>
-          <div class="card-title">
-            <MessageOutlined class="card-icon" />
-            <span>{{ bot.name }}</span>
+    <a-spin :spinning="loading">
+      <div class="card-grid">
+        <a-card v-for="bot in bots" :key="bot.id" class="bot-card" hoverable>
+          <template #title>
+            <div class="card-title">
+              <MessageOutlined class="card-icon" />
+              <span>{{ bot.name }}</span>
+            </div>
+          </template>
+          <template #extra>
+            <a-switch
+              :checked="bot.status === BotStatus.Active"
+              :checked-children="'启用'"
+              :un-checked-children="'禁用'"
+              @change="handleToggleStatus(bot)"
+            />
+          </template>
+          <p class="card-description">{{ bot.description || '暂无描述' }}</p>
+          <div class="card-meta">
+            <div class="meta-item">
+              <span class="meta-label">平台:</span>
+              <a-tag color="blue">
+                {{ BotPlatformLabels[bot.platform] || bot.platform }}
+              </a-tag>
+            </div>
+            <div class="meta-item" v-if="bot.identifier">
+              <span class="meta-label">标识符:</span>
+              <span class="meta-value">{{ bot.identifier }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">绑定智能体:</span>
+              <span v-if="bot.agent" class="meta-value linked">
+                <LinkOutlined /> {{ bot.agent.name }}
+              </span>
+              <span v-else class="meta-value unbound">未绑定</span>
+            </div>
           </div>
-        </template>
-        <template #extra>
-          <a-tag :color="bot.status === 'active' ? 'green' : 'default'">
-            {{ bot.status === 'active' ? '在线' : '离线' }}
-          </a-tag>
-        </template>
-        <p class="card-description">{{ bot.description }}</p>
-        <div class="card-meta">
-          <div class="meta-item">
-            <span class="meta-label">平台:</span>
-            <a-tag :color="platformColors[bot.platform] || 'default'">
-              {{ platformNames[bot.platform] || bot.platform }}
-            </a-tag>
-          </div>
-          <div class="meta-item" v-if="bot.appId !== '-'">
-            <span class="meta-label">App ID:</span>
-            <span class="meta-value">{{ bot.appId }}</span>
-          </div>
-        </div>
-        <template #actions>
-          <a-tooltip title="编辑">
-            <EditOutlined @click="handleEdit(bot.id)" />
-          </a-tooltip>
-          <a-tooltip title="删除">
-            <DeleteOutlined @click="handleDelete(bot.id)" />
-          </a-tooltip>
-        </template>
-      </a-card>
+          <template #actions>
+            <a-tooltip title="编辑">
+              <EditOutlined @click="handleEdit(bot)" />
+            </a-tooltip>
+            <a-tooltip title="绑定智能体">
+              <LinkOutlined @click="handleBindAgent(bot)" />
+            </a-tooltip>
+            <a-tooltip title="删除">
+              <DeleteOutlined @click="handleDelete(bot)" />
+            </a-tooltip>
+          </template>
+        </a-card>
+      </div>
+    </a-spin>
+
+    <a-empty v-if="!loading && bots.length === 0" description="暂无机器人，点击上方按钮创建" />
+
+    <!-- 分页 -->
+    <div class="pagination-container" v-if="total > size">
+      <a-pagination
+        v-model:current="page"
+        :total="total"
+        :pageSize="size"
+        show-less-items
+        @change="fetchBots"
+      />
     </div>
 
-    <a-empty v-if="bots.length === 0" description="暂无机器人，点击上方按钮创建" />
+    <!-- 创建/编辑机器人弹窗 -->
+    <BotFormModal
+      v-model:visible="formModalVisible"
+      :bot="editingBot"
+      :agents="agents"
+      @success="handleFormSuccess"
+    />
+
+    <!-- 绑定智能体弹窗 -->
+    <a-modal
+      v-model:open="bindModalVisible"
+      title="绑定智能体"
+      ok-text="确定"
+      cancel-text="取消"
+      @ok="confirmBindAgent"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="选择智能体">
+          <a-select
+            v-model:value="selectedAgentId"
+            placeholder="请选择要绑定的智能体"
+            allow-clear
+            show-search
+            :filter-option="(input: string, option: { label: string }) => option.label.toLowerCase().includes(input.toLowerCase())"
+          >
+            <a-select-option
+              v-for="agent in agents"
+              :key="agent.id"
+              :value="agent.id"
+              :label="agent.name"
+            >
+              {{ agent.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <style scoped>
 .page-container {
   padding: 24px;
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .page-header {
@@ -196,5 +339,20 @@ const handleDelete = (id: string) => {
 .meta-value {
   color: var(--text-secondary);
   font-family: monospace;
+}
+
+.meta-value.linked {
+  color: var(--color-primary);
+}
+
+.meta-value.unbound {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
 }
 </style>

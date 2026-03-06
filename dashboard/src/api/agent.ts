@@ -1,8 +1,10 @@
 import { http, type ApiResponse, type PageResponse } from '@/utils/http'
 import type {
   Agent,
+  AgentDefaults,
   CreateAgentRequest,
   UpdateAgentRequest,
+  ValidationResult,
 } from '@/types/agent'
 
 /**
@@ -21,6 +23,13 @@ export const agentApi = {
    */
   get(id: string): Promise<ApiResponse<Agent>> {
     return http.get<Agent>(`/agents/${id}`)
+  },
+
+  /**
+   * 获取智能体默认配置
+   */
+  getDefaults(): Promise<ApiResponse<AgentDefaults>> {
+    return http.get<AgentDefaults>('/agents/defaults')
   },
 
   /**
@@ -48,7 +57,14 @@ export const agentApi = {
    * 更新智能体状态
    */
   updateStatus(id: string, status: string): Promise<ApiResponse<void>> {
-    return http.patch<void>(`/agents/${id}/status`, { status })
+    return http.put<void>(`/agents/${id}/status`, { status })
+  },
+
+  /**
+   * 校验智能体配置是否完整
+   */
+  validate(id: string): Promise<ApiResponse<ValidationResult>> {
+    return http.post<ValidationResult>(`/agents/${id}/validate`)
   },
 }
 

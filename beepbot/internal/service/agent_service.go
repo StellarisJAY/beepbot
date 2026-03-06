@@ -1,13 +1,12 @@
 package service
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/types"
-	"gorm.io/datatypes"
 )
 
 // AgentService 智能体服务
@@ -23,21 +22,87 @@ func NewAgentService(repo repository.AgentRepository, providerService *ProviderS
 	}
 }
 
-// CreateAgentRequest 创建智能体请求
-type CreateAgentRequest struct {
-	Name              string  `json:"name" binding:"required"`
-	Description       string  `json:"description"`
-	ProviderID        string  `json:"provider_id" binding:"required"`
-	Model             string  `json:"model" binding:"required"`
+// AgentDefaults 智能体默认配置
+type AgentDefaults struct {
 	SystemPrompt      string  `json:"system_prompt"`
 	Temperature       float32 `json:"temperature"`
 	MaxIterations     int     `json:"max_iterations"`
 	MaxOutputTokens   int64   `json:"max_output_tokens"`
-	WorkingDir        string  `json:"working_dir" binding:"required"`
 	ContextWindowSize int     `json:"context_window_size"`
 	WindowSize        int     `json:"window_size"`
 	CompressionRatio  float64 `json:"compression_ratio"`
 	ContextMaxTokens  int64   `json:"context_max_tokens"`
+}
+
+// ValidationResult 校验结果
+type ValidationResult struct {
+	Valid  bool     `json:"valid"`
+	Errors []string `json:"errors"`
+}
+
+// 默认配置常量
+const (
+	DefaultSystemPrompt      = "你是一名智能助手"
+	DefaultTemperature       = 0.7
+	DefaultMaxIterations     = 50
+	DefaultMaxOutputTokens   = 4096
+	DefaultContextWindowSize = 20
+	DefaultWindowSize        = 20
+	DefaultCompressionRatio  = 0.7
+	DefaultContextMaxTokens  = 4096
+)
+
+// CreateAgentRequest 创建智能体请求
+type CreateAgentRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	// 以下字段可选，创建时可留空
+	ProviderID      string  `json:"provider_id"`
+	Model           string  `json:"model"`
+	SystemPrompt    string  `json:"system_prompt"`
+	WorkingDir      string  `json:"working_dir"`
+	Temperature     float32 `json:"temperature"`
+	MaxIterations   int     `json:"max_iterations"`
+	MaxOutputTokens int64   `json:"max_output_tokens"`
+	// ... 其他参数使用默认值
+	ContextWindowSize int     `json:"context_window_size"`
+	WindowSize        int     `json:"window_size"`
+	CompressionRatio  float64 `json:"compression_ratio"`
+	ContextMaxTokens  int64   `json:"context_max_tokens"`
+}
+
+// GetAgentDefaults 获取智能体默认配置
+func (s *AgentService) GetAgentDefaults() *AgentDefaults {
+	return &AgentDefaults{
+		SystemPrompt:      DefaultSystemPrompt,
+		Temperature:       DefaultTemperature,
+		MaxIterations:     DefaultMaxIterations,
+		MaxOutputTokens:   DefaultMaxOutputTokens,
+		ContextWindowSize: DefaultContextWindowSize,
+		WindowSize:        DefaultWindowSize,
+		CompressionRatio:  DefaultCompressionRatio,
+		ContextMaxTokens:  DefaultContextMaxTokens,
+	}
+}
+
+// ValidateAgentConfig 校验智能体配置是否完整
+func (s *AgentService) ValidateAgentConfig(agent *AgentResponse) *ValidationResult {
+	var errs []string
+
+	if agent.ProviderID == "" {
+		errs = append(errs, "供应商不能为空")
+	}
+	if agent.Model == "" {
+		errs = append(errs, "模型不能为空")
+	}
+	if agent.WorkingDir == "" {
+		errs = append(errs, "工作目录不能为空")
+	}
+
+	return &ValidationResult{
+		Valid:  len(errs) == 0,
+		Errors: errs,
+	}
 }
 
 // UpdateAgentRequest 更新智能体请求
@@ -56,19 +121,6 @@ type UpdateAgentRequest struct {
 	CompressionRatio  float64           `json:"compression_ratio"`
 	ContextMaxTokens  int64             `json:"context_max_tokens"`
 	Status            types.AgentStatus `json:"status"`
-}
-
-// CreateChannelRequest 创建渠道绑定请求
-type CreateChannelRequest struct {
-	ChannelType       string         `json:"channel_type" binding:"required"`
-	ChannelIdentifier string         `json:"channel_identifier"`
-	Config            map[string]any `json:"config"`
-}
-
-// UpdateChannelRequest 更新渠道绑定请求
-type UpdateChannelRequest struct {
-	ChannelIdentifier string         `json:"channel_identifier"`
-	Config            map[string]any `json:"config"`
 }
 
 // AgentResponse 智能体响应
@@ -91,17 +143,6 @@ type AgentResponse struct {
 	Status            types.AgentStatus `json:"status"`
 	CreatedAt         time.Time         `json:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at"`
-	Channels          []ChannelResponse `json:"channels,omitempty"`
-}
-
-// ChannelResponse 渠道绑定响应
-type ChannelResponse struct {
-	ID                string         `json:"id"`
-	AgentID           string         `json:"agent_id"`
-	ChannelType       string         `json:"channel_type"`
-	ChannelIdentifier string         `json:"channel_identifier"`
-	Config            map[string]any `json:"config"`
-	CreatedAt         time.Time      `json:"created_at"`
 }
 
 // CreateAgent 创建智能体
@@ -111,57 +152,75 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		return nil, errors.New("agent name already exists")
 	}
 
-	// 检查供应商是否存在
-	if _, err := s.providerService.GetProvider(req.ProviderID); err != nil {
-		return nil, errors.New("provider not found")
+	// 如果指定了供应商，检查是否存在
+	if req.ProviderID != "" {
+		if _, err := s.providerService.GetProvider(req.ProviderID); err != nil {
+			return nil, errors.New("provider not found")
+		}
 	}
 
+	// 生成智能体ID（先生成，用于工作目录）
+	agentID := types.GenerateUUIDv7()
+
+	// 获取默认配置
+	defaults := s.GetAgentDefaults()
+
 	// 设置默认值
+	systemPrompt := req.SystemPrompt
+	if systemPrompt == "" {
+		systemPrompt = defaults.SystemPrompt
+	}
+
+	workingDir := req.WorkingDir
+	if workingDir == "" {
+		workingDir = fmt.Sprintf("/data/agents/%s", agentID)
+	}
+
 	temperature := req.Temperature
 	if temperature == 0 {
-		temperature = 0.7
+		temperature = defaults.Temperature
 	}
 	maxIterations := req.MaxIterations
 	if maxIterations == 0 {
-		maxIterations = 50
+		maxIterations = defaults.MaxIterations
 	}
 	maxOutputTokens := req.MaxOutputTokens
 	if maxOutputTokens == 0 {
-		maxOutputTokens = 4096
+		maxOutputTokens = defaults.MaxOutputTokens
 	}
 	contextWindowSize := req.ContextWindowSize
 	if contextWindowSize == 0 {
-		contextWindowSize = 20
+		contextWindowSize = defaults.ContextWindowSize
 	}
 	windowSize := req.WindowSize
 	if windowSize == 0 {
-		windowSize = 20
+		windowSize = defaults.WindowSize
 	}
 	compressionRatio := req.CompressionRatio
 	if compressionRatio == 0 {
-		compressionRatio = 0.7
+		compressionRatio = defaults.CompressionRatio
 	}
 	contextMaxTokens := req.ContextMaxTokens
 	if contextMaxTokens == 0 {
-		contextMaxTokens = 4096
+		contextMaxTokens = defaults.ContextMaxTokens
 	}
 
 	agent := &types.Agent{
-		ID:                types.GenerateUUIDv7(),
+		ID:                agentID,
 		Name:              req.Name,
 		Description:       req.Description,
-		ProviderID:        req.ProviderID,
-		Model:             req.Model,
-		SystemPrompt:      req.SystemPrompt,
+		ProviderID:        req.ProviderID, // 可为空
+		Model:             req.Model,      // 可为空
+		SystemPrompt:      systemPrompt,
 		Temperature:       temperature,
 		MaxIterations:     maxIterations,
 		MaxOutputTokens:   maxOutputTokens,
-		WorkingDir:        req.WorkingDir,
+		WorkingDir:        workingDir,
 		ContextWindowSize: contextWindowSize,
 		WindowSize:        windowSize,
 		CompressionRatio:  compressionRatio,
 		ContextMaxTokens:  contextMaxTokens,
-		Status:            types.AgentStatusActive,
+		Status:            types.AgentStatusInactive, // 默认禁用，配置完成后启用
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}
@@ -256,15 +315,6 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 
 // DeleteAgent 删除智能体
 func (s *AgentService) DeleteAgent(id string) error {
-	// 先删除关联的渠道绑定
-	channels, err := s.repo.GetChannelsByAgent(id)
-	if err != nil {
-		return err
-	}
-	for _, ch := range channels {
-		_ = s.repo.DeleteChannel(ch.ID)
-	}
-
 	return s.repo.Delete(id)
 }
 
@@ -328,16 +378,6 @@ func (s *AgentService) GetActiveAgents() ([]AgentResponse, error) {
 	return responses, nil
 }
 
-// GetAgentByChannel 根据渠道获取智能体
-func (s *AgentService) GetAgentByChannel(channelType, channelIdentifier string) (*AgentResponse, error) {
-	agent, err := s.repo.GetByChannel(channelType, channelIdentifier)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.toResponse(agent), nil
-}
-
 // UpdateAgentStatus 更新智能体状态
 func (s *AgentService) UpdateAgentStatus(id string, status types.AgentStatus) error {
 	agent, err := s.repo.GetByID(id)
@@ -349,79 +389,6 @@ func (s *AgentService) UpdateAgentStatus(id string, status types.AgentStatus) er
 	agent.UpdatedAt = time.Now()
 
 	return s.repo.Update(agent)
-}
-
-// CreateChannel 创建渠道绑定
-func (s *AgentService) CreateChannel(agentID string, req *CreateChannelRequest) (*types.AgentChannel, error) {
-	// 检查智能体是否存在
-	if _, err := s.repo.GetByID(agentID); err != nil {
-		return nil, errors.New("agent not found")
-	}
-
-	// 处理 Config
-	var config datatypes.JSON
-	if req.Config != nil {
-		data, _ := json.Marshal(req.Config)
-		config = data
-	}
-
-	channel := &types.AgentChannel{
-		ID:                types.GenerateUUIDv7(),
-		AgentID:           agentID,
-		ChannelType:       req.ChannelType,
-		ChannelIdentifier: req.ChannelIdentifier,
-		Config:            config,
-		CreatedAt:         time.Now(),
-	}
-
-	if err := s.repo.CreateChannel(channel); err != nil {
-		return nil, err
-	}
-
-	return channel, nil
-}
-
-// UpdateChannel 更新渠道绑定
-func (s *AgentService) UpdateChannel(id string, req *UpdateChannelRequest) (*types.AgentChannel, error) {
-	channel, err := s.repo.GetChannelByID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	if req.ChannelIdentifier != "" {
-		channel.ChannelIdentifier = req.ChannelIdentifier
-	}
-
-	if req.Config != nil {
-		data, _ := json.Marshal(req.Config)
-		channel.Config = data
-	}
-
-	if err := s.repo.UpdateChannel(channel); err != nil {
-		return nil, err
-	}
-
-	return channel, nil
-}
-
-// DeleteChannel 删除渠道绑定
-func (s *AgentService) DeleteChannel(id string) error {
-	return s.repo.DeleteChannel(id)
-}
-
-// GetChannelsByAgent 获取智能体的所有渠道绑定
-func (s *AgentService) GetChannelsByAgent(agentID string) ([]ChannelResponse, error) {
-	channels, err := s.repo.GetChannelsByAgent(agentID)
-	if err != nil {
-		return nil, err
-	}
-
-	responses := make([]ChannelResponse, len(channels))
-	for i, ch := range channels {
-		responses[i] = *s.channelToResponse(&ch)
-	}
-
-	return responses, nil
 }
 
 // GetAgentEntity 获取智能体实体
@@ -461,27 +428,12 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 func (s *AgentService) toResponseWithRelations(agent *types.Agent) *AgentResponse {
 	response := s.toResponse(agent)
 
-	// 添加供应商信息
-	if agent.Provider != nil {
-		response.Provider = s.providerService.toResponse(agent.Provider)
+	// 如果有 ProviderID，查询供应商信息
+	if agent.ProviderID != "" {
+		if provider, err := s.providerService.GetProviderEntity(agent.ProviderID); err == nil {
+			response.Provider = s.providerService.toResponse(provider)
+		}
 	}
 
 	return response
-}
-
-// channelToResponse 转换渠道绑定为响应格式
-func (s *AgentService) channelToResponse(channel *types.AgentChannel) *ChannelResponse {
-	var config map[string]any
-	if channel.Config != nil {
-		_ = json.Unmarshal(channel.Config, &config)
-	}
-
-	return &ChannelResponse{
-		ID:                channel.ID,
-		AgentID:           channel.AgentID,
-		ChannelType:       channel.ChannelType,
-		ChannelIdentifier: channel.ChannelIdentifier,
-		Config:            config,
-		CreatedAt:         channel.CreatedAt,
-	}
 }

@@ -28,7 +28,7 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 // SetupRouter 设置 API 路由
-func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService) *gin.Engine {
+func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService) *gin.Engine {
 	router := gin.Default()
 
 	// 添加 CORS 中间件
@@ -37,6 +37,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 	// 创建处理器
 	providerHandler := NewProviderHandler(providerService)
 	agentHandler := NewAgentHandler(agentService)
+	botHandler := NewBotHandler(botService)
 
 	// API v1 路由组
 	v1 := router.Group("/api/v1")
@@ -58,17 +59,27 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 		{
 			agents.GET("", agentHandler.ListAgents)
 			agents.GET("/active", agentHandler.GetActiveAgents)
+			agents.GET("/defaults", agentHandler.GetAgentDefaults)
 			agents.GET("/:id", agentHandler.GetAgent)
 			agents.POST("", agentHandler.CreateAgent)
+			agents.POST("/:id/validate", agentHandler.ValidateAgent)
 			agents.PUT("/:id", agentHandler.UpdateAgent)
 			agents.DELETE("/:id", agentHandler.DeleteAgent)
 			agents.PUT("/:id/status", agentHandler.UpdateAgentStatus)
+		}
 
-			// 渠道绑定管理
-			agents.GET("/:id/channels", agentHandler.GetChannels)
-			agents.POST("/:id/channels", agentHandler.CreateChannel)
-			agents.PUT("/:id/channels/:channelId", agentHandler.UpdateChannel)
-			agents.DELETE("/:id/channels/:channelId", agentHandler.DeleteChannel)
+		// 机器人管理
+		bots := v1.Group("/bots")
+		{
+			bots.GET("", botHandler.ListBots)
+			bots.GET("/unbound", botHandler.GetUnboundBots)
+			bots.GET("/platform/:platform", botHandler.GetBotsByPlatform)
+			bots.GET("/:id", botHandler.GetBot)
+			bots.POST("", botHandler.CreateBot)
+			bots.PUT("/:id", botHandler.UpdateBot)
+			bots.DELETE("/:id", botHandler.DeleteBot)
+			bots.PUT("/:id/status", botHandler.UpdateBotStatus)
+			bots.PUT("/:id/agent", botHandler.BindAgent)
 		}
 	}
 
