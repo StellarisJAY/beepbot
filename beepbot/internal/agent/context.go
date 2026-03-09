@@ -166,7 +166,7 @@ const completionMessage = `
 type contextBuilder struct {
 	systemPrompt     string
 	skillManager     *skill.Manager
-	session          *session.Session
+	session          session.Session
 	prebuiltMessages []types.Message
 	workingDir       string
 	sharedDataDir    string

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
-	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/skill"
 	"github.com/StellarisJAY/beepbot/internal/tool"
@@ -35,7 +34,7 @@ const compressionPrompt = `请将以下对话历史压缩成简洁的摘要，�
 type AgentRunner struct {
 	model          types.LLMProvider
 	bus            *channel.MessageBus
-	sessionManager *session.SessionManager
+	sessionManager *session.StandaloneSessionManager // 仅 Standalone 模式使用
 	tools          *tool.ToolRegistry
 	skillManager   *skill.Manager
 	modelID        string
@@ -51,19 +50,14 @@ type AgentRunner struct {
 	onLoopFinish         LoopFinishHook
 }
 
-type StandaloneAgentRunner struct {
-	AgentRunner
-	config config.StandaloneConfig
-}
-
 type MessageRecvHook func(message channel.InboundMessage)
 type ChatCompletionHook func(response types.LLMResponse)
 type ContextCompressionHook func()
 type ToolUsageHook func(tool types.ToolCall, result string, err error, duration time.Duration)
 type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
 
-// MessageLoop 核心消息消费循环
-func (a *AgentRunner) MessageLoop(ctx context.Context) {
+// StandaloneMessageLoop standalone模式下消息消费循环
+func (a *AgentRunner) StandaloneMessageLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -80,18 +74,18 @@ func (a *AgentRunner) MessageLoop(ctx context.Context) {
 			} else {
 				slog.Info("receive private message", "channel", message.Channel, "user", message.UserID, "content", message.Content)
 			}
-			sessionKey = session.GetSessionKey(message.Channel, message.GroupID, message.UserID)
+			sessionKey = session.GetSessionKeyForStandalone(message.Channel, message.GroupID, message.UserID)
 			session := a.sessionManager.GetOrCreateSession(sessionKey)
 			if a.onMessageRecv != nil {
 				a.onMessageRecv(message)
 			}
 			// 创建智能体循环gorountine处理消息
-			go a.agentLoop(ctx, session, message)
+			go a.AgentLoop(ctx, session, message)
 		}
 	}
 }
 
-func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, message channel.InboundMessage) {
+func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage) {
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.maxIterations
 
@@ -126,7 +120,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	contextBuilder := contextBuilder{
 		systemPrompt:    a.systemPrompt,  // 用户配置的系统提示词
 		skillManager:    a.skillManager,  // 技能信息
-		session:         session,         // 会话信息
+		session:         sess,            // 会话信息
 		workingDir:      a.workingDir,    // 工作目录
 		userInstruction: message.Content, // 用户请求
 	}
@@ -140,17 +134,17 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 	for iterations := range maxIterations + 5 {
 		iterationCount++
 		// 检查是否需要压缩上下文
-		if session.NeedCompress() {
+		if sess.NeedCompress() {
 			if a.onContextCompression != nil {
 				a.onContextCompression()
 			}
-			slog.Info("context compression triggered", "sessionKey", session.Key, "tokenUsed", session.GetTokenUsage())
-			a.compressContext(ctx, session)
+			slog.Info("context compression triggered", "tokenUsed", sess.GetTokenUsage())
+			a.compressContext(ctx, sess)
 		}
 
 		// 如果达到了最大迭代次数，添加一条提示结束任务和记录任务状态的消息
 		if iterations == maxIterations {
-			session.AppendMessage(types.Message{
+			sess.AppendMessage(types.Message{
 				Role:    types.RoleSystem,
 				Content: completionMessage,
 			})
@@ -184,7 +178,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 
 		// 没有工具调用，直接返回消息
 		if response.FinishReason != "tool_calls" {
-			session.AppendMessage(types.Message{
+			sess.AppendMessage(types.Message{
 				Role:    types.RoleAssistant,
 				Content: response.Content,
 				Usage:   tokenUsage,
@@ -225,7 +219,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			ToolCalls: functionCalls,
 			Usage:     tokenUsage,
 		}
-		session.AppendMessage(assistantMsg)
+		sess.AppendMessage(assistantMsg)
 
 		slog.Info("executing tools", "count", len(functionCalls))
 		// 执行工具函数
@@ -261,7 +255,7 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 					toolMessage.Content = fmt.Sprintf("工具调用已连续错误:%d次, 请停止继续调用该工具, 请尝试其他方案或直接回复用户。", count)
 				}
 				slog.Debug("Tool call error", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "args", tc.Function.Arguments, "error", err)
-				session.AppendMessage(toolMessage)
+				sess.AppendMessage(toolMessage)
 				continue
 			}
 			// 记录工具调用结果
@@ -272,11 +266,11 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 			}
 			slog.Info("Tool call success", "channel", channelName, "userID", userID, "tool", tc.Function.Name, "tool_call_id", tc.ID, "args", truncateText(tc.Function.Arguments, 20), "result", truncateText(result, 50))
 			// 添加工具调用结果到会话
-			session.AppendMessage(toolMessage)
+			sess.AppendMessage(toolMessage)
 		}
 	}
 
-	slog.Info("agent loop finished", "output_tokens", totalTokenUsage.OutputTokens, "context_used", session.GetTokenUsage())
+	slog.Info("agent loop finished", "output_tokens", totalTokenUsage.OutputTokens, "context_used", sess.GetTokenUsage())
 	if a.onLoopFinish != nil {
 		a.onLoopFinish(iterationCount, totalTokenUsage)
 	}
@@ -286,9 +280,9 @@ func (a *AgentRunner) agentLoop(ctx context.Context, session *session.Session, m
 // 1. 获取需要压缩的历史消息
 // 2. 调用 LLM 生成摘要
 // 3. 用摘要替换旧历史
-func (a *AgentRunner) compressContext(ctx context.Context, session *session.Session) {
+func (a *AgentRunner) compressContext(ctx context.Context, sess session.Session) {
 	// 获取被移除的消息用于生成摘要
-	removed := session.Compress(compressionKeepCount)
+	removed := sess.Compress(compressionKeepCount)
 	if len(removed) == 0 {
 		return
 	}
@@ -331,8 +325,8 @@ func (a *AgentRunner) compressContext(ctx context.Context, session *session.Sess
 	}
 
 	// 保存摘要到会话
-	session.SetSummary(response.Content)
-	slog.Info("context compressed successfully", "sessionKey", session.Key, "summaryLength", len(response.Content))
+	sess.SetSummary(response.Content)
+	slog.Info("context compressed successfully", "summaryLength", len(response.Content))
 }
 
 // truncateText 截断文本，保留指定最大长度

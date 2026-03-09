@@ -18,7 +18,7 @@ type BaseProvider struct {
 	defaultModel string
 }
 
-func CreateLLMProvider(config config.StandaloneConfig) (types.LLMProvider, error) {
+func CreateLLMProviderFromConfig(config config.StandaloneConfig) (types.LLMProvider, error) {
 	provider := strings.ToLower(config.AgentConfig.Provider)
 	model := config.AgentConfig.Model
 
@@ -41,5 +41,28 @@ func CreateLLMProvider(config config.StandaloneConfig) (types.LLMProvider, error
 		return NewOpenAIProvider(apiKey, baseURL, model), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s, available providers: openai, dashscope", provider)
+	}
+}
+
+func CreateLLMProviderFromApi(provider *types.Provider, model string) (types.LLMProvider, error) {
+	providerType := provider.ProviderType
+	model = strings.ToLower(model)
+	apiKey := provider.APIKey
+	baseURL := provider.BaseURL
+	switch providerType {
+	case "openai":
+		slog.Info("Using OpenAI provider", "model", model)
+		if strings.TrimSpace(baseURL) == "" {
+			baseURL = OpenAIBaseURl
+		}
+		return NewOpenAIProvider(apiKey, baseURL, model), nil
+	case "dashscope":
+		slog.Info("Using DashScope provider", "model", model)
+		if strings.TrimSpace(baseURL) == "" {
+			baseURL = DashScopeBaseURL
+		}
+		return NewOpenAIProvider(apiKey, baseURL, model), nil
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s, available providers: openai, dashscope", providerType)
 	}
 }

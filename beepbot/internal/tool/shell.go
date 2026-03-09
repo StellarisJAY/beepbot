@@ -207,7 +207,8 @@ func (s *ShellTool) Parameters() map[string]any {
 	}
 }
 
-func NewShellTool(config config.StandaloneConfig) Tool {
+// NewShellToolFromStandalone 从standalone模式创建shell工具，配置从配置文件导入
+func NewShellToolFromStandalone(config config.StandaloneConfig) Tool {
 	shellToolConfig := config.BuiltinTools.Shell
 	timeout, err := time.ParseDuration(shellToolConfig.Timeout)
 	if err != nil {
@@ -224,6 +225,20 @@ func NewShellTool(config config.StandaloneConfig) Tool {
 		forbiddenCommands: forbiddenCommands,
 		timeout:           timeout,
 		workingDir:        config.AgentConfig.WorkingDir,
+		system:            runtime.GOOS,
+	}
+	tool.description = tool.buildDescription()
+	return tool
+}
+
+// NewShellToolFromApi 从api服务创建的shell工具，配置从数据库导入
+func NewShellToolFromApi(workingDir string) Tool {
+	timeout := 60 * time.Second
+
+	tool := &ShellTool{
+		forbiddenCommands: mustForbiddenCommands,
+		timeout:           timeout,
+		workingDir:        workingDir,
 		system:            runtime.GOOS,
 	}
 	tool.description = tool.buildDescription()

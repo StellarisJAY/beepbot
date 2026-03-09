@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/repository"
@@ -10,10 +12,19 @@ import (
 	"gorm.io/datatypes"
 )
 
+// ChannelManager 接口定义，用于解耦 BotService 和具体的 ChannelManager 实现
+type ChannelManager interface {
+	StartChannel(ctx context.Context, bot *types.Bot) error
+	StopChannel(botID string) error
+	RestartChannel(ctx context.Context, bot *types.Bot) error
+	IsChannelRunning(botID string) bool
+}
+
 // BotService 机器人服务
 type BotService struct {
-	repo         repository.BotRepository
-	agentService *AgentService
+	repo           repository.BotRepository
+	agentService   *AgentService
+	channelManager ChannelManager
 }
 
 func NewBotService(repo repository.BotRepository, agentService *AgentService) *BotService {
@@ -21,6 +32,12 @@ func NewBotService(repo repository.BotRepository, agentService *AgentService) *B
 		repo:         repo,
 		agentService: agentService,
 	}
+}
+
+// SetChannelManager 设置 ChannelManager
+// 用于在 API 模式下注入 ChannelManager
+func (s *BotService) SetChannelManager(cm ChannelManager) {
+	s.channelManager = cm
 }
 
 // CreateBotRequest 创建机器人请求
@@ -63,7 +80,7 @@ type BotResponse struct {
 }
 
 // CreateBot 创建机器人
-func (s *BotService) CreateBot(req *CreateBotRequest) (*types.Bot, error) {
+func (s *BotService) CreateBot(ctx context.Context, req *CreateBotRequest) (*types.Bot, error) {
 	// 检查名称是否已存在
 	if _, err := s.repo.GetByName(req.Name); err == nil {
 		return nil, errors.New("bot name already exists")
@@ -100,15 +117,26 @@ func (s *BotService) CreateBot(req *CreateBotRequest) (*types.Bot, error) {
 		return nil, err
 	}
 
+	// 如果 Bot 状态为 active，启动 Channel
+	if bot.Status == types.BotStatusActive && s.channelManager != nil {
+		if err := s.channelManager.StartChannel(ctx, bot); err != nil {
+			slog.Error("failed to start channel for new bot", "bot_id", bot.ID, "error", err)
+			// 不返回错误，Bot 已创建成功，只是 Channel 启动失败
+		}
+	}
+
 	return bot, nil
 }
 
 // UpdateBot 更新机器人
-func (s *BotService) UpdateBot(id string, req *UpdateBotRequest) (*types.Bot, error) {
+func (s *BotService) UpdateBot(ctx context.Context, id string, req *UpdateBotRequest) (*types.Bot, error) {
 	bot, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
+
+	oldStatus := bot.Status
+	configChanged := false
 
 	if req.Name != "" {
 		// 检查名称是否被其他机器人使用
@@ -129,6 +157,7 @@ func (s *BotService) UpdateBot(id string, req *UpdateBotRequest) (*types.Bot, er
 	if req.Config != nil {
 		data, _ := json.Marshal(req.Config)
 		bot.Config = data
+		configChanged = true
 	}
 
 	if req.Status != "" {
@@ -141,11 +170,40 @@ func (s *BotService) UpdateBot(id string, req *UpdateBotRequest) (*types.Bot, er
 		return nil, err
 	}
 
+	// 处理 Channel 生命周期
+	if s.channelManager != nil {
+		// 状态变更
+		if oldStatus != bot.Status {
+			if bot.Status == types.BotStatusInactive {
+				// active -> inactive: 停止 Channel
+				if err := s.channelManager.StopChannel(bot.ID); err != nil {
+					slog.Error("failed to stop channel", "bot_id", bot.ID, "error", err)
+				}
+			} else if bot.Status == types.BotStatusActive {
+				// inactive -> active: 启动 Channel
+				if err := s.channelManager.StartChannel(ctx, bot); err != nil {
+					slog.Error("failed to start channel", "bot_id", bot.ID, "error", err)
+				}
+			}
+		} else if configChanged && bot.Status == types.BotStatusActive {
+			// 配置变更且 Bot 处于 active 状态，重启 Channel
+			if err := s.channelManager.RestartChannel(ctx, bot); err != nil {
+				slog.Error("failed to restart channel", "bot_id", bot.ID, "error", err)
+			}
+		}
+	}
+
 	return bot, nil
 }
 
 // DeleteBot 删除机器人
 func (s *BotService) DeleteBot(id string) error {
+	// 先停止 Channel
+	if s.channelManager != nil {
+		if err := s.channelManager.StopChannel(id); err != nil {
+			slog.Warn("failed to stop channel before delete", "bot_id", id, "error", err)
+		}
+	}
 	return s.repo.Delete(id)
 }
 
@@ -247,16 +305,36 @@ func (s *BotService) GetBotsByPlatform(platform types.BotPlatform) ([]BotRespons
 }
 
 // UpdateBotStatus 更新机器人状态
-func (s *BotService) UpdateBotStatus(id string, status types.BotStatus) error {
+func (s *BotService) UpdateBotStatus(ctx context.Context, id string, status types.BotStatus) error {
 	bot, err := s.repo.GetByID(id)
 	if err != nil {
 		return err
 	}
 
+	oldStatus := bot.Status
 	bot.Status = status
 	bot.UpdatedAt = time.Now()
 
-	return s.repo.Update(bot)
+	if err := s.repo.Update(bot); err != nil {
+		return err
+	}
+
+	// 处理 Channel 生命周期
+	if s.channelManager != nil && oldStatus != status {
+		if status == types.BotStatusInactive {
+			// active -> inactive: 停止 Channel
+			if err := s.channelManager.StopChannel(id); err != nil {
+				slog.Error("failed to stop channel", "bot_id", id, "error", err)
+			}
+		} else if status == types.BotStatusActive {
+			// inactive -> active: 启动 Channel
+			if err := s.channelManager.StartChannel(ctx, bot); err != nil {
+				slog.Error("failed to start channel", "bot_id", id, "error", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // toResponse 转换为响应格式

@@ -72,7 +72,7 @@ func (h *BotHandler) CreateBot(c *gin.Context) {
 		return
 	}
 
-	bot, err := h.service.CreateBot(&req)
+	bot, err := h.service.CreateBot(c.Request.Context(), &req)
 	if err != nil {
 		Error(c, 500, "failed to create bot: "+err.Error())
 		return
@@ -96,7 +96,7 @@ func (h *BotHandler) UpdateBot(c *gin.Context) {
 		return
 	}
 
-	bot, err := h.service.UpdateBot(id, &req)
+	bot, err := h.service.UpdateBot(c.Request.Context(), id, &req)
 	if err != nil {
 		Error(c, 500, "failed to update bot: "+err.Error())
 		return
@@ -145,7 +145,7 @@ func (h *BotHandler) UpdateBotStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateBotStatus(id, req.Status); err != nil {
+	if err := h.service.UpdateBotStatus(c.Request.Context(), id, req.Status); err != nil {
 		Error(c, 500, "failed to update bot status: "+err.Error())
 		return
 	}

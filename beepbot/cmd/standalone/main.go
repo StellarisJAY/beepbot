@@ -89,7 +89,7 @@ func main() {
 	// 创建消息总线
 	messageBus := channel.NewMessageBus()
 	// 创建消息源管理器
-	channelManager := channel.NewChannelManager(*config, messageBus)
+	channelManager := channel.NewStandaloneChannelManager(*config, messageBus)
 	if err := channelManager.InitChannels(ctx, config.ChannelConfig); err != nil {
 		panic(err)
 	}
@@ -113,7 +113,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		agentRun.MessageLoop(ctx)
+		agentRun.StandaloneMessageLoop(ctx)
 	}()
 
 	if config.HeartBeat.Enable {

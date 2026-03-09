@@ -11,7 +11,7 @@ import (
 
 func NewStandaloneRun(config config.StandaloneConfig, bus *channel.MessageBus) (*AgentRunner, error) {
 	// 创建聊天模型接口
-	llmProvider, err := provider.CreateLLMProvider(config)
+	llmProvider, err := provider.CreateLLMProviderFromConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -30,11 +30,11 @@ func NewStandaloneRun(config config.StandaloneConfig, bus *channel.MessageBus) (
 	toolRegistry.Register(tool.NewReadSystemInfoTool())
 	// shell 工具
 	if config.BuiltinTools.Shell.Enable {
-		toolRegistry.Register(tool.NewShellTool(config))
+		toolRegistry.Register(tool.NewShellToolFromStandalone(config))
 	}
 
 	// 会话管理器，管理不同会话的消息缓存和长期记忆
-	sessionManager := session.NewSessionManager(config)
+	sessionManager := session.NewStandaloneSessionManager(config)
 
 	// 创建技能管理器
 	skillManager := skill.NewManager(config.DataDir, workingDir)

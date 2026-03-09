@@ -39,9 +39,9 @@ func NewQQBotChannelFromConfig(config config.StandaloneConfig, bus *MessageBus) 
 	}
 }
 
-// NewQQBotChannel 在api模式下通过channel的配置创建
+// NewQQBotChannel 在api模式下通过channel的配置创建, id为botID，也就是channelID
 func NewQQBotChannel(appId, appSecret string, id string, bus *MessageBus) Channel {
-	channelID := fmt.Sprintf("QQ/%s", id)
+	channelID := id
 	return &QQBotChannel{
 		BaseChannel: NewBaseChannel(channelID, bus),
 		appID:       appId,

@@ -11,12 +11,14 @@ import (
 	"syscall"
 
 	"github.com/StellarisJAY/beepbot/internal/api"
+	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/database"
 	"github.com/StellarisJAY/beepbot/internal/logger"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/service"
+	"github.com/StellarisJAY/beepbot/internal/types"
 )
 
 var (
@@ -77,6 +79,15 @@ func main() {
 	agentService := service.NewAgentService(agentRepo, providerService)
 	botService := service.NewBotService(botRepo, agentService)
 
+	// 创建消息总线
+	messageBus := channel.NewMessageBus()
+
+	// 创建 ChannelManager
+	channelManager := channel.NewChannelManager(messageBus)
+
+	// 将 ChannelManager 注入到 BotService
+	botService.SetChannelManager(channelManager)
+
 	// 设置 API 路由
 	router := api.SetupRouter(providerService, agentService, botService)
 
@@ -92,6 +103,29 @@ func main() {
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// 启动出站消息分发
+	go func() {
+		channelManager.DispatchOutbound(ctx)
+	}()
+
+	// 启动 AgentManager 消息循环
+	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor)
+	go func() {
+		agentManager.MessageLoop(ctx)
+	}()
+
+	// 加载所有 active 状态的 Bot 并启动 Channel
+	activeBots, err := botRepo.GetByStatus(types.BotStatusActive)
+	if err != nil {
+		slog.Warn("failed to load active bots", "error", err)
+	} else {
+		slog.Info("loading active bots", "count", len(activeBots))
+		errs := channelManager.StartAllActiveChannels(ctx, activeBots)
+		for _, e := range errs {
+			slog.Error("failed to start channel", "error", e)
+		}
+	}
 
 	// 启动 API 服务器
 	go func() {
@@ -110,6 +144,10 @@ func main() {
 		slog.Info("Received signal, shutting down", "signal", sig)
 		cancel()
 	}
+
+	// 停止所有 Channel
+	slog.Info("Stopping all channels...")
+	channelManager.Shutdown()
 
 	slog.Info("BeepBot API Server shutdown complete")
 }
