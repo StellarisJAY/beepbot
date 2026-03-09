@@ -31,6 +31,24 @@ func (f *QQChannelFactory) CreateChannel(bot *types.Bot, bus *MessageBus) (Chann
 	return NewQQBotChannel(cfg.AppID, cfg.AppSecret, channelID, bus), nil
 }
 
+// FeishuChannelFactory 飞书 Channel 工厂
+type FeishuChannelFactory struct{}
+
+// NewFeishuChannelFactory 创建飞书 Channel 工厂
+func NewFeishuChannelFactory() *FeishuChannelFactory {
+	return &FeishuChannelFactory{}
+}
+
+// CreateChannel 根据 Bot 配置创建飞书 Channel
+func (f *FeishuChannelFactory) CreateChannel(bot *types.Bot, bus *MessageBus) (Channel, error) {
+	cfg, err := ParseFeishuChannelConfig(bot.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Feishu channel config: %w", err)
+	}
+	channelID := fmt.Sprintf("%s", bot.ID)
+	return NewFeishuChannel(cfg.AppID, cfg.AppSecret, cfg.EncryptKey, channelID, bus, cfg.AllowedUsers, cfg.AllowedGroups), nil
+}
+
 // ChannelFactoryRegistry 工厂注册表
 type ChannelFactoryRegistry struct {
 	factories map[types.BotPlatform]ChannelFactory
@@ -44,6 +62,7 @@ func NewChannelFactoryRegistry() *ChannelFactoryRegistry {
 
 	// 注册默认工厂
 	registry.Register(types.BotPlatformQQ, NewQQChannelFactory())
+	registry.Register(types.BotPlatformFeishu, NewFeishuChannelFactory())
 
 	return registry
 }

@@ -29,6 +29,7 @@ export const BotStatusOptions = [
  */
 export enum BotPlatform {
   QQ = 'qq',
+  Feishu = 'feishu',
 }
 
 /**
@@ -36,6 +37,7 @@ export enum BotPlatform {
  */
 export const BotPlatformLabels: Record<BotPlatform, string> = {
   [BotPlatform.QQ]: 'QQ',
+  [BotPlatform.Feishu]: '飞书',
 }
 
 /**
@@ -43,6 +45,7 @@ export const BotPlatformLabels: Record<BotPlatform, string> = {
  */
 export const BotPlatformOptions = [
   { value: BotPlatform.QQ, label: BotPlatformLabels[BotPlatform.QQ] },
+  { value: BotPlatform.Feishu, label: BotPlatformLabels[BotPlatform.Feishu] },
 ]
 
 /**
@@ -98,4 +101,13 @@ export interface BindAgentRequest {
 export interface QQBotConfig {
   app_id: string
   app_secret: string
+}
+
+/**
+ * 飞书机器人配置
+ */
+export interface FeishuBotConfig {
+  app_id: string
+  app_secret: string
+  encrypt_key?: string
 }

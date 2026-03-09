@@ -62,6 +62,13 @@ func (c *StandaloneChannelManager) InitChannels(ctx context.Context, config conf
 		qqBotChannel := NewQQBotChannelFromConfig(c.config, c.bus)
 		c.channels[qqBotChannel.ID()] = qqBotChannel
 	}
+	// 飞书机器人消息通道
+	if config.Feishu != nil {
+		feishuChannel := NewFeishuChannelFromConfig(c.config, c.bus)
+		if feishuChannel != nil {
+			c.channels[feishuChannel.ID()] = feishuChannel
+		}
+	}
 
 	for id, channel := range c.channels {
 		if err := channel.Start(ctx); err != nil {

@@ -18,7 +18,8 @@ const (
 type BotPlatform string
 
 const (
-	BotPlatformQQ BotPlatform = "qq"
+	BotPlatformQQ     BotPlatform = "qq"
+	BotPlatformFeishu BotPlatform = "feishu"
 	// 未来可扩展: discord, telegram, wechat 等
 )
 

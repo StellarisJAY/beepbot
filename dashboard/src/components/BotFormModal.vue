@@ -2,7 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { botApi } from '@/api/bot'
-import type { Bot, CreateBotRequest, UpdateBotRequest, QQBotConfig } from '@/types/bot'
+import type { Bot, CreateBotRequest, UpdateBotRequest, QQBotConfig, FeishuBotConfig } from '@/types/bot'
 import { BotPlatform, BotPlatformOptions } from '@/types/bot'
 import type { Agent } from '@/types/agent'
 
@@ -29,6 +29,10 @@ const formData = ref({
   // QQ 平台配置
   app_id: '',
   app_secret: '',
+  // 飞书平台配置
+  feishu_app_id: '',
+  feishu_app_secret: '',
+  feishu_encrypt_key: '',
 })
 
 const loading = ref(false)
@@ -44,15 +48,20 @@ watch(
     if (val) {
       if (props.bot) {
         // 编辑模式，填充数据
-        const botConfig = props.bot.config as unknown as QQBotConfig
+        const botConfig = props.bot.config as unknown as QQBotConfig & FeishuBotConfig
         formData.value = {
           name: props.bot.name,
           description: props.bot.description || '',
           platform: props.bot.platform,
           identifier: props.bot.identifier || '',
           agent_id: props.bot.agent_id || undefined,
+          // QQ 配置
           app_id: botConfig?.app_id || '',
           app_secret: botConfig?.app_secret || '',
+          // 飞书配置
+          feishu_app_id: props.bot.platform === BotPlatform.Feishu ? (botConfig?.app_id || '') : '',
+          feishu_app_secret: props.bot.platform === BotPlatform.Feishu ? (botConfig?.app_secret || '') : '',
+          feishu_encrypt_key: props.bot.platform === BotPlatform.Feishu ? (botConfig?.encrypt_key || '') : '',
         }
       } else {
         // 新建模式，重置表单
@@ -72,6 +81,9 @@ const resetForm = () => {
     agent_id: undefined,
     app_id: '',
     app_secret: '',
+    feishu_app_id: '',
+    feishu_app_secret: '',
+    feishu_encrypt_key: '',
   }
 }
 
@@ -103,13 +115,36 @@ const handleSubmit = async () => {
       return
     }
   }
+  // 飞书平台验证
+  if (formData.value.platform === BotPlatform.Feishu) {
+    if (!formData.value.feishu_app_id.trim()) {
+      message.error('请输入 App ID')
+      return
+    }
+    if (!formData.value.feishu_app_secret.trim()) {
+      message.error('请输入 App Secret')
+      return
+    }
+  }
 
   loading.value = true
   try {
     // 构建配置
-    const config: Record<string, unknown> = {
-      app_id: formData.value.app_id,
-      app_secret: formData.value.app_secret,
+    let config: Record<string, unknown> = {}
+    if (formData.value.platform === BotPlatform.QQ) {
+      config = {
+        app_id: formData.value.app_id,
+        app_secret: formData.value.app_secret,
+      }
+    } else if (formData.value.platform === BotPlatform.Feishu) {
+      config = {
+        app_id: formData.value.feishu_app_id,
+        app_secret: formData.value.feishu_app_secret,
+      }
+      // Encrypt Key 是可选的，只有填写了才添加
+      if (formData.value.feishu_encrypt_key.trim()) {
+        config.encrypt_key = formData.value.feishu_encrypt_key.trim()
+      }
     }
 
     if (isEdit.value && props.bot) {
@@ -216,6 +251,35 @@ const handleSubmit = async () => {
           <a-input-password
             v-model:value="formData.app_secret"
             placeholder="请输入 QQ 机器人 App Secret"
+            :maxlength="256"
+          />
+        </a-form-item>
+      </template>
+
+      <!-- 飞书平台配置 -->
+      <template v-if="formData.platform === BotPlatform.Feishu">
+        <a-divider>飞书平台配置</a-divider>
+
+        <a-form-item label="App ID" required>
+          <a-input
+            v-model:value="formData.feishu_app_id"
+            placeholder="请输入飞书机器人 App ID"
+            :maxlength="128"
+          />
+        </a-form-item>
+
+        <a-form-item label="App Secret" required>
+          <a-input-password
+            v-model:value="formData.feishu_app_secret"
+            placeholder="请输入飞书机器人 App Secret"
+            :maxlength="256"
+          />
+        </a-form-item>
+
+        <a-form-item label="Encrypt Key">
+          <a-input-password
+            v-model:value="formData.feishu_encrypt_key"
+            placeholder="请输入 Encrypt Key（可选）"
             :maxlength="256"
           />
         </a-form-item>

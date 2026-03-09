@@ -51,6 +51,7 @@ type MilvusMemoryConfig struct {
 type ChannelConfig struct {
 	Console *ConsoleChannelConfig `json:"console,omitempty"`
 	QQ      *QQChannelConfig      `json:"qq,omitempty"`
+	Feishu  *FeishuChannelConfig  `json:"feishu,omitempty"`
 }
 
 type ConsoleChannelConfig struct {
@@ -59,6 +60,14 @@ type ConsoleChannelConfig struct {
 type QQChannelConfig struct {
 	AppID     string `json:"app_id"`
 	AppSecret string `json:"app_secret"`
+}
+
+type FeishuChannelConfig struct {
+	AppID         string   `json:"app_id"`
+	AppSecret     string   `json:"app_secret"`
+	EncryptKey    string   `json:"encrypt_key,omitempty"`
+	AllowedUsers  []string `json:"allowed_users,omitempty"`
+	AllowedGroups []string `json:"allowed_groups,omitempty"`
 }
 
 type Logging struct {

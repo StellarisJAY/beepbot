@@ -67,7 +67,7 @@ func (h *BotHandler) CreateBot(c *gin.Context) {
 	}
 
 	// 验证平台类型
-	if req.Platform != types.BotPlatformQQ {
+	if req.Platform != types.BotPlatformQQ && req.Platform != types.BotPlatformFeishu {
 		BadRequest(c, "unsupported platform: "+string(req.Platform))
 		return
 	}
