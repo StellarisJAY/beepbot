@@ -208,12 +208,8 @@ func (s *ApiSession) SetSummary(summary string) {
 	s.summary = summary
 	s.needCompress = false
 
-	// 更新数据库
-	session := &types.Session{
-		ID:      s.sessionID,
-		Summary: summary,
-	}
-	if err := s.repo.UpdateSession(session); err != nil {
+	// 只更新 summary 字段，避免覆盖其他字段
+	if err := s.repo.UpdateSessionSummary(s.sessionID, summary); err != nil {
 		slog.Error("failed to update session summary", "sessionID", s.sessionID, "error", err)
 	}
 }

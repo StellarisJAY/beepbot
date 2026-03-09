@@ -29,6 +29,9 @@ type BotRepository interface {
 
 	// BindAgent 绑定智能体
 	BindAgent(botID string, agentID *string) error
+
+	// FindByIDs 根据ID列表批量查询 Bot
+	FindByIDs(ids []string) ([]types.Bot, error)
 }
 
 type botRepository struct {
@@ -88,4 +91,13 @@ func (r *botRepository) GetWithRelations(id string) (*types.Bot, error) {
 
 func (r *botRepository) BindAgent(botID string, agentID *string) error {
 	return r.db.Model(&types.Bot{}).Where("id = ?", botID).Update("agent_id", agentID).Error
+}
+
+func (r *botRepository) FindByIDs(ids []string) ([]types.Bot, error) {
+	if len(ids) == 0 {
+		return []types.Bot{}, nil
+	}
+	var bots []types.Bot
+	err := r.db.Where("id IN ?", ids).Find(&bots).Error
+	return bots, err
 }

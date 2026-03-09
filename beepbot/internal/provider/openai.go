@@ -39,6 +39,7 @@ func (d *OpenAIProvider) Chat(ctx context.Context, messages []types.Message, mod
 	response.Usage = &types.TokenUsage{
 		InputTokens:     result.Usage.PromptTokens,
 		OutputTokens:    result.Usage.CompletionTokens,
+		TotalTokens:     result.Usage.TotalTokens,
 		CacheTokens:     result.Usage.PromptTokensDetails.CachedTokens,
 		ReasoningTokens: result.Usage.CompletionTokensDetails.ReasoningTokens,
 	}

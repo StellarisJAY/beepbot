@@ -5,6 +5,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// SessionStats 会话统计信息
+type SessionStats struct {
+	SessionID    string
+	MessageCount int64
+	TotalTokens  int64
+}
+
 // SessionRepository 会话仓储接口
 type SessionRepository interface {
 	// 会话操作
@@ -12,11 +19,19 @@ type SessionRepository interface {
 	GetSessionByKey(key string) (*types.Session, error)
 	GetSessionByID(id string) (*types.Session, error)
 	UpdateSession(session *types.Session) error
+	UpdateSessionSummary(sessionID string, summary string) error
 	DeleteSession(id string) error
+
+	// GetSessionsByAgentID 根据智能体ID分页查询会话列表
+	GetSessionsByAgentID(agentID string, page, pageSize int) ([]types.Session, int64, error)
+
+	// GetSessionStats 批量获取会话统计信息（消息数量和token用量）
+	GetSessionStats(sessionIDs []string) (map[string]SessionStats, error)
 
 	// 消息操作
 	AppendMessage(sessionID string, message *types.SessionMessage) error
 	GetMessages(sessionID string, limit int) ([]types.SessionMessage, error)
+	GetMessagesPaginated(sessionID string, beforeID string, limit int) ([]types.SessionMessage, int64, error)
 	GetOldestMessages(sessionID string, limit int) ([]types.SessionMessage, error)
 	DeleteMessages(sessionID string, messageIDs []string) error
 	DeleteOldestMessages(sessionID string, count int) error
@@ -67,6 +82,33 @@ func (r *SessionRepositoryImpl) UpdateSession(session *types.Session) error {
 	return r.db.Save(session).Error
 }
 
+// UpdateSessionSummary 只更新会话的 summary 字段
+func (r *SessionRepositoryImpl) UpdateSessionSummary(sessionID string, summary string) error {
+	return r.db.Model(&types.Session{}).Where("id = ?", sessionID).Update("summary", summary).Error
+}
+
+// GetSessionsByAgentID 根据智能体ID分页查询会话列表
+func (r *SessionRepositoryImpl) GetSessionsByAgentID(agentID string, page, pageSize int) ([]types.Session, int64, error) {
+	var sessions []types.Session
+	var total int64
+
+	offset := (page - 1) * pageSize
+
+	// 统计总数
+	if err := r.db.Model(&types.Session{}).Where("agent_id = ?", agentID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询，按更新时间倒序
+	err := r.db.Where("agent_id = ?", agentID).
+		Order("updated_at DESC").
+		Offset(offset).
+		Limit(pageSize).
+		Find(&sessions).Error
+
+	return sessions, total, err
+}
+
 // DeleteSession 删除会话
 func (r *SessionRepositoryImpl) DeleteSession(id string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -94,6 +136,45 @@ func (r *SessionRepositoryImpl) GetMessages(sessionID string, limit int) ([]type
 	}
 	err := query.Find(&messages).Error
 	return messages, err
+}
+
+// GetMessagesPaginated 分页获取消息（支持向上翻页）
+// beforeID: 加载此ID之前的消息，为空则加载最新消息
+// limit: 每次加载的消息数量
+// 返回消息按创建时间升序排列，total 为会话消息总数
+func (r *SessionRepositoryImpl) GetMessagesPaginated(sessionID string, beforeID string, limit int) ([]types.SessionMessage, int64, error) {
+	var messages []types.SessionMessage
+	var total int64
+
+	// 统计总数
+	if err := r.db.Model(&types.SessionMessage{}).Where("session_id = ?", sessionID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	query := r.db.Where("session_id = ?", sessionID)
+
+	// 如果指定了 beforeID，获取该消息之前的消息
+	if beforeID != "" {
+		// 先获取 beforeID 消息的创建时间
+		var beforeMessage types.SessionMessage
+		if err := r.db.Select("created_at").Where("id = ?", beforeID).First(&beforeMessage).Error; err != nil {
+			return nil, 0, err
+		}
+		query = query.Where("created_at < ?", beforeMessage.CreatedAt)
+	}
+
+	// 按创建时间倒序获取 limit 条，然后反转顺序
+	err := query.Order("created_at DESC").Limit(limit).Find(&messages).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 反转消息顺序，使其按时间升序
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages, total, nil
 }
 
 // GetOldestMessages 获取最早的消息
@@ -153,4 +234,50 @@ func (r *SessionRepositoryImpl) GetTokenUsage(sessionID string) (int64, error) {
 		Select("COALESCE(SUM(total_tokens), 0)").
 		Scan(&total).Error
 	return total, err
+}
+
+// GetSessionStats 批量获取会话统计信息（消息数量和token用量）
+func (r *SessionRepositoryImpl) GetSessionStats(sessionIDs []string) (map[string]SessionStats, error) {
+	result := make(map[string]SessionStats)
+	if len(sessionIDs) == 0 {
+		return result, nil
+	}
+
+	// 使用单个查询获取所有会话的统计信息
+	type statsRow struct {
+		SessionID    string
+		MessageCount int64
+		TotalTokens  int64
+	}
+	var rows []statsRow
+
+	err := r.db.Model(&types.SessionMessage{}).
+		Select("session_id, COUNT(*) as message_count, COALESCE(SUM(total_tokens), 0) as total_tokens").
+		Where("session_id IN ?", sessionIDs).
+		Group("session_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		result[row.SessionID] = SessionStats{
+			SessionID:    row.SessionID,
+			MessageCount: row.MessageCount,
+			TotalTokens:  row.TotalTokens,
+		}
+	}
+
+	// 对于没有消息的会话，初始化为0
+	for _, id := range sessionIDs {
+		if _, exists := result[id]; !exists {
+			result[id] = SessionStats{
+				SessionID:    id,
+				MessageCount: 0,
+				TotalTokens:  0,
+			}
+		}
+	}
+
+	return result, nil
 }

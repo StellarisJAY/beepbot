@@ -28,7 +28,7 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 // SetupRouter 设置 API 路由
-func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService) *gin.Engine {
+func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService, sessionService *service.SessionService) *gin.Engine {
 	router := gin.Default()
 
 	// 添加 CORS 中间件
@@ -38,6 +38,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 	providerHandler := NewProviderHandler(providerService)
 	agentHandler := NewAgentHandler(agentService)
 	botHandler := NewBotHandler(botService)
+	sessionHandler := NewSessionHandler(sessionService)
 
 	// API v1 路由组
 	v1 := router.Group("/api/v1")
@@ -66,6 +67,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 			agents.PUT("/:id", agentHandler.UpdateAgent)
 			agents.DELETE("/:id", agentHandler.DeleteAgent)
 			agents.PUT("/:id/status", agentHandler.UpdateAgentStatus)
+			agents.GET("/:id/sessions", sessionHandler.GetAgentSessions)
 		}
 
 		// 机器人管理
@@ -80,6 +82,12 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 			bots.DELETE("/:id", botHandler.DeleteBot)
 			bots.PUT("/:id/status", botHandler.UpdateBotStatus)
 			bots.PUT("/:id/agent", botHandler.BindAgent)
+		}
+
+		// 会话管理
+		sessions := v1.Group("/sessions")
+		{
+			sessions.GET("/:id/messages", sessionHandler.GetSessionMessages)
 		}
 	}
 

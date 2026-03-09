@@ -73,11 +73,13 @@ func main() {
 	providerRepo := repository.NewProviderRepository(db)
 	agentRepo := repository.NewAgentRepository(db)
 	botRepo := repository.NewBotRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
 	agentService := service.NewAgentService(agentRepo, providerService)
 	botService := service.NewBotService(botRepo, agentService)
+	sessionService := service.NewSessionService(sessionRepo, botRepo)
 
 	// 创建消息总线
 	messageBus := channel.NewMessageBus()
@@ -89,7 +91,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService)
 
 	// 确定 API 端口
 	port := cfg.Port

@@ -31,9 +31,15 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'logs',
-        name: 'AgentLogs',
+        name: 'agent-logs',
         component: () => import('@/views/agents/AgentLogs.vue'),
         meta: { title: '智能体日志' },
+      },
+      {
+        path: 'sessions/:sessionId',
+        name: 'session-messages',
+        component: () => import('@/views/agents/SessionMessages.vue'),
+        meta: { title: '会话消息' },
       },
       {
         path: 'monitor',
