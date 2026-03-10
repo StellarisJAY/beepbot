@@ -13,6 +13,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/api"
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
+	cronscheduler "github.com/StellarisJAY/beepbot/internal/cron"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/database"
 	"github.com/StellarisJAY/beepbot/internal/logger"
@@ -74,12 +75,14 @@ func main() {
 	agentRepo := repository.NewAgentRepository(db)
 	botRepo := repository.NewBotRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
+	cronRepo := repository.NewCronRepository(db)
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
 	agentService := service.NewAgentService(agentRepo, providerService)
 	botService := service.NewBotService(botRepo, agentService)
 	sessionService := service.NewSessionService(sessionRepo, botRepo)
+	cronService := service.NewCronService(cronRepo, agentService)
 
 	// 创建消息总线
 	messageBus := channel.NewMessageBus()
@@ -91,7 +94,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService)
 
 	// 确定 API 端口
 	port := cfg.Port
@@ -128,6 +131,23 @@ func main() {
 			slog.Error("failed to start channel", "error", e)
 		}
 	}
+
+	// 初始化并启动定时任务调度器
+	var cronScheduler *cronscheduler.Scheduler
+	cronScheduler = cronscheduler.NewScheduler(cronRepo, messageBus)
+	if err := cronScheduler.Start(ctx); err != nil {
+		slog.Error("Failed to start cron scheduler", "error", err)
+	} else {
+		slog.Info("Cron scheduler started")
+		// 将 scheduler 注入到 CronService
+		cronService.SetScheduler(cronScheduler)
+	}
+	defer func() {
+		if cronScheduler != nil {
+			cronScheduler.Stop()
+			slog.Info("Cron scheduler stopped")
+		}
+	}()
 
 	// 启动 API 服务器
 	go func() {

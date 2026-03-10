@@ -66,45 +66,66 @@ func (a *AgentManager) MessageLoop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			channelID := msg.Channel
-			// 查询channel的机器人和绑定的智能体
-			bot, err := a.botRepo.GetWithRelations(channelID)
-			if err != nil {
-				slog.Error("agent manager query channel's binding agent error", "err", err)
-				continue
-			}
-			// 机器人禁用
-			if bot.Status == types.BotStatusInactive {
-				slog.Info("agent manager unable to start inactive bot's agent")
-				continue
-			}
-			// 机器人没有绑定智能体
-			if bot.Agent == nil {
-				slog.Error("agent manager start agent error", "err", errors.New("bot has no binding agent"))
-				a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-					Channel:          msg.Channel,
-					Content:          "机器人没有绑定智能体，无法回复消息",
-					GroupID:          msg.GroupID,
-					UserID:           msg.UserID,
-					InboundMessageID: msg.MessageID,
-				})
-				continue
-			}
 
-			// 智能体禁用，向用户发送禁用消息
-			if bot.Agent.Status == types.AgentStatusInactive {
-				slog.Info("agent manager unable to start inactive agent")
-				a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-					Channel:          msg.Channel,
-					Content:          "智能体已被禁用",
-					GroupID:          msg.GroupID,
-					UserID:           msg.UserID,
-					InboundMessageID: msg.MessageID,
-				})
+			var agentDef *types.Agent
+
+			// 根据 AgentID 是否存在区分消息来源
+			if msg.AgentID != "" {
+				// 定时任务消息：直接通过 AgentID 查询智能体
+				var err error
+				agentDef, err = a.agentRepo.GetByID(msg.AgentID)
+				if err != nil {
+					slog.Error("agent manager query agent by AgentID error", "err", err, "agent_id", msg.AgentID)
+					continue
+				}
+				// 检查智能体状态
+				if agentDef.Status == types.AgentStatusInactive {
+					slog.Info("agent manager unable to start inactive agent for cron job", "agent_id", msg.AgentID)
+					continue
+				}
+			} else {
+				// 机器人消息：通过 Channel 查询机器人绑定的智能体
+				channelID := msg.Channel
+				bot, err := a.botRepo.GetWithRelations(channelID)
+				if err != nil {
+					slog.Error("agent manager query channel's binding agent error", "err", err)
+					continue
+				}
+				// 机器人禁用
+				if bot.Status == types.BotStatusInactive {
+					slog.Info("agent manager unable to start inactive bot's agent")
+					continue
+				}
+				// 机器人没有绑定智能体
+				if bot.Agent == nil {
+					slog.Error("agent manager start agent error", "err", errors.New("bot has no binding agent"))
+					a.bus.PublishOutbound(ctx, channel.OutboundMessage{
+						Channel:          msg.Channel,
+						Content:          "机器人没有绑定智能体，无法回复消息",
+						GroupID:          msg.GroupID,
+						UserID:           msg.UserID,
+						InboundMessageID: msg.MessageID,
+					})
+					continue
+				}
+
+				// 智能体禁用，向用户发送禁用消息
+				if bot.Agent.Status == types.AgentStatusInactive {
+					slog.Info("agent manager unable to start inactive agent")
+					a.bus.PublishOutbound(ctx, channel.OutboundMessage{
+						Channel:          msg.Channel,
+						Content:          "智能体已被禁用",
+						GroupID:          msg.GroupID,
+						UserID:           msg.UserID,
+						InboundMessageID: msg.MessageID,
+					})
+					continue
+				}
+				agentDef = bot.Agent
 			}
 
 			// 启动智能体
-			go a.startAgentLoop(ctx, bot.Agent, msg)
+			go a.startAgentLoop(ctx, agentDef, msg)
 		}
 	}
 }

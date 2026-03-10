@@ -16,6 +16,7 @@ type InboundMessage struct {
 	MessageID  string
 	SessionKey string
 	Content    string
+	AgentID    string // 定时任务直接指定智能体ID，机器人消息为空
 }
 
 type OutboundMessage struct {

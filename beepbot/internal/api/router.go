@@ -28,7 +28,7 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 // SetupRouter 设置 API 路由
-func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService, sessionService *service.SessionService) *gin.Engine {
+func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService, sessionService *service.SessionService, cronService *service.CronService) *gin.Engine {
 	router := gin.Default()
 
 	// 添加 CORS 中间件
@@ -39,6 +39,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 	agentHandler := NewAgentHandler(agentService)
 	botHandler := NewBotHandler(botService)
 	sessionHandler := NewSessionHandler(sessionService)
+	cronHandler := NewCronHandler(cronService)
 
 	// API v1 路由组
 	v1 := router.Group("/api/v1")
@@ -88,6 +89,18 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 		sessions := v1.Group("/sessions")
 		{
 			sessions.GET("/:id/messages", sessionHandler.GetSessionMessages)
+		}
+
+		// 定时任务管理
+		crons := v1.Group("/crons")
+		{
+			crons.GET("", cronHandler.ListCronJobs)
+			crons.GET("/:id", cronHandler.GetCronJob)
+			crons.POST("", cronHandler.CreateCronJob)
+			crons.PUT("/:id", cronHandler.UpdateCronJob)
+			crons.DELETE("/:id", cronHandler.DeleteCronJob)
+			crons.PUT("/:id/status", cronHandler.UpdateCronJobStatus)
+			crons.GET("/agent/:agent_id", cronHandler.GetCronJobsByAgent)
 		}
 	}
 

@@ -46,6 +46,7 @@ func InitDatabase(cfg config.DatabaseConfig, loggingConfig config.Logging) (*gor
 		&types.Bot{},
 		&types.Session{},
 		&types.SessionMessage{},
+		&types.CronJob{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)

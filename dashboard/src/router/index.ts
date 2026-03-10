@@ -62,6 +62,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'IM机器人' },
   },
   {
+    path: '/crons',
+    name: 'Crons',
+    component: () => import('@/views/crons/CronList.vue'),
+    meta: { title: '定时任务' },
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/settings/Settings.vue'),

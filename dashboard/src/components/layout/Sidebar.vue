@@ -7,6 +7,7 @@ import {
   ApiOutlined,
   MessageOutlined,
   SettingOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -29,6 +30,11 @@ const menuItems = [
     key: '/bots',
     icon: MessageOutlined,
     title: 'IM机器人',
+  },
+  {
+    key: '/crons',
+    icon: ClockCircleOutlined,
+    title: '定时任务',
   },
   {
     key: '/settings',
