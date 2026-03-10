@@ -17,6 +17,10 @@ type SkillRepository interface {
 	GetByID(id string) (*types.Skill, error)
 	// GetByName 根据名称获取技能
 	GetByName(name string) (*types.Skill, error)
+	// GetByIDs 根据ID列表批量获取技能
+	GetByIDs(ids []string) ([]types.Skill, error)
+	// GetActiveByIDs 根据ID列表批量获取启用的技能
+	GetActiveByIDs(ids []string) ([]types.Skill, error)
 	// List 分页获取技能列表
 	List(page, size int, status types.SkillStatus) ([]types.Skill, int64, error)
 	// ExistsByName 检查技能名称是否存在
@@ -105,6 +109,26 @@ func (r *skillRepositoryImpl) ExistsByName(name string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// GetByIDs 根据ID列表批量获取技能
+func (r *skillRepositoryImpl) GetByIDs(ids []string) ([]types.Skill, error) {
+	if len(ids) == 0 {
+		return []types.Skill{}, nil
+	}
+	var skills []types.Skill
+	err := r.db.Where("id IN ?", ids).Find(&skills).Error
+	return skills, err
+}
+
+// GetActiveByIDs 根据ID列表批量获取启用的技能
+func (r *skillRepositoryImpl) GetActiveByIDs(ids []string) ([]types.Skill, error) {
+	if len(ids) == 0 {
+		return []types.Skill{}, nil
+	}
+	var skills []types.Skill
+	err := r.db.Where("id IN ? AND status = ?", ids, types.SkillStatusActive).Find(&skills).Error
+	return skills, err
 }
 
 // CreateFile 创建文件记录

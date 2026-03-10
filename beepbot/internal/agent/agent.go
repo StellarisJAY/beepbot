@@ -19,9 +19,6 @@ import (
 // 工具调用连续出错次数，达到这个次数将提示智能体提前结束或尝试其他方案
 const toolErrorThreshold = 3
 
-// 压缩时保留的最近消息数量
-const compressionKeepCount = 5
-
 // 压缩提示词，用于让 LLM 生成历史消息摘要
 const compressionPrompt = `请将以下对话历史压缩成简洁的摘要，保留关键信息：
 1. 用户的主要请求和目标
@@ -253,7 +250,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 // 3. 用摘要替换旧历史
 func (a *AgentRunner) compressContext(ctx context.Context, sess session.Session) {
 	// 获取被移除的消息用于生成摘要
-	removed := sess.Compress(compressionKeepCount)
+	removed := sess.Compress()
 	if len(removed) == 0 {
 		return
 	}

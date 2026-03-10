@@ -15,7 +15,15 @@ import (
 )
 
 // NewApiRunner 创建API模式的智能体运行器
-func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *channel.MessageBus, config config.APIConfig, cronDeps *tool.CronToolDeps) (*AgentRunner, error) {
+func NewApiRunner(
+	agentDef *types.Agent,
+	providerDef *types.Provider,
+	bus *channel.MessageBus,
+	config config.APIConfig,
+	cronDeps *tool.CronToolDeps,
+	skillRepo repository.SkillRepository,
+	agentRepo repository.AgentRepository,
+) (*AgentRunner, error) {
 	// 创建聊天模型接口
 	llmProvider, err := provider.CreateLLMProviderFromApi(providerDef, agentDef.Model)
 	if err != nil {
@@ -32,8 +40,8 @@ func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *chann
 	toolRegistry.Register(tool.NewEditFileTool(workingDir, config.DataDir))
 	// 待办管理工具
 	toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
-	// 操作系统信息工具
-	toolRegistry.Register(tool.NewReadSystemInfoTool())
+	// Shell工具
+	// TODO 沙箱环境
 	toolRegistry.Register(tool.NewShellToolFromApi(workingDir))
 	// 定时任务工具（仅在API模式下注册）
 	if cronDeps != nil {
@@ -41,7 +49,7 @@ func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *chann
 	}
 
 	// 创建技能管理器
-	skillManager := skill.NewManager(config.DataDir, workingDir)
+	skillManager := skill.NewManager(skillRepo, agentRepo, agentDef.ID, config.DataDir)
 
 	agentRun := &AgentRunner{
 		model:         llmProvider,
@@ -60,11 +68,12 @@ func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *chann
 // ApiAgentRunner API 模式的 AgentRunner，包含会话仓储
 type ApiAgentRunner struct {
 	*AgentRunner
-	sessionRepo      repository.SessionRepository
-	agentDef         *types.Agent
-	windowSize       int
-	maxTokens        int64
-	compressionRatio float64
+	sessionRepo         repository.SessionRepository
+	agentDef            *types.Agent
+	windowSize          int
+	maxTokens           int64
+	compressionRatio    float64
+	compressionKeepSize int
 }
 
 // NewApiAgentRunner 创建 API 模式的 AgentRunner
@@ -75,8 +84,10 @@ func NewApiAgentRunner(
 	config config.APIConfig,
 	sessionRepo repository.SessionRepository,
 	cronDeps *tool.CronToolDeps,
+	skillRepo repository.SkillRepository,
+	agentRepo repository.AgentRepository,
 ) (*ApiAgentRunner, error) {
-	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps)
+	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps, skillRepo, agentRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -94,14 +105,19 @@ func NewApiAgentRunner(
 	if compressionRatio <= 0 || compressionRatio >= 1 {
 		compressionRatio = 0.7
 	}
+	compressionKeepSize := agentDef.CompressionKeepSize
+	if compressionKeepSize <= 0 {
+		compressionKeepSize = 5
+	}
 
 	return &ApiAgentRunner{
-		AgentRunner:      runner,
-		sessionRepo:      sessionRepo,
-		agentDef:         agentDef,
-		windowSize:       windowSize,
-		maxTokens:        maxTokens,
-		compressionRatio: compressionRatio,
+		AgentRunner:         runner,
+		sessionRepo:         sessionRepo,
+		agentDef:            agentDef,
+		windowSize:          windowSize,
+		maxTokens:           maxTokens,
+		compressionRatio:    compressionRatio,
+		compressionKeepSize: compressionKeepSize,
 	}, nil
 }
 
@@ -131,6 +147,7 @@ func (r *ApiAgentRunner) createSession(sessionKey string, botID string) (session
 		r.windowSize,
 		r.maxTokens,
 		r.compressionRatio,
+		r.compressionKeepSize,
 	)
 }
 

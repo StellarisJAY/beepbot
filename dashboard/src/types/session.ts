@@ -37,6 +37,7 @@ export interface MessageListItem {
   input_tokens?: number
   output_tokens?: number
   total_tokens?: number
+  in_window: boolean
   created_at: string
 }
 

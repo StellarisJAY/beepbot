@@ -21,6 +21,7 @@ type AgentManager struct {
 	botRepo      repository.BotRepository
 	providerRepo repository.ProviderRepository
 	sessionRepo  repository.SessionRepository
+	skillRepo    repository.SkillRepository // 技能仓储
 	bus          *channel.MessageBus
 	encryptor    *crypto.Encryptor
 	cronDeps     *tool.CronToolDeps // 定时任务工具依赖
@@ -46,6 +47,7 @@ func NewAgentManager(
 		botRepo:      botRepo,
 		providerRepo: providerRepo,
 		sessionRepo:  repository.NewSessionRepository(db),
+		skillRepo:    repository.NewSkillRepository(db),
 		bus:          messageBus,
 		encryptor:    encryptor,
 		cronDeps:     cronDeps,
@@ -143,7 +145,7 @@ func (a *AgentManager) startAgentLoop(ctx context.Context, agentDef *types.Agent
 		return
 	}
 	providerDef.APIKey, _ = a.encryptor.Decrypt(providerDef.APIKey)
-	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps)
+	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo)
 	if err != nil {
 		slog.Error("create agent runner error", "err", err)
 		return

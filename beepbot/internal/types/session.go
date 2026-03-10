@@ -44,6 +44,7 @@ type SessionMessage struct {
 	InputTokens  int64     `gorm:"column:input_tokens;type:bigint;default:0"`
 	OutputTokens int64     `gorm:"column:output_tokens;type:bigint;default:0"`
 	TotalTokens  int64     `gorm:"column:total_tokens;type:bigint;default:0"`
+	InWindow     bool      `gorm:"column:in_window;type:boolean;default:true;index"`
 	CreatedAt    time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime"`
 }
 

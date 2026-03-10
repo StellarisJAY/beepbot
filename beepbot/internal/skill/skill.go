@@ -2,196 +2,90 @@ package skill
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/StellarisJAY/beepbot/internal/repository"
+	"github.com/StellarisJAY/beepbot/internal/types"
 )
 
-// Skill 表示一个技能
-type Skill struct {
-	Name        string `json:"name"`        // 技能名称
-	Description string `json:"description"` // 技能简短描述
-	Path        string `json:"path"`        // SKILL.md 文件的相对路径
-	Source      string `json:"source"`      // 来源: "global" 或 "workspace"
-}
-
 // Manager 技能管理器
+// 从数据库读取智能体关联的技能，生成技能提示词
 type Manager struct {
-	globalSkillsDir    string // 全局技能库目录
-	workspaceSkillsDir string // 工作空间技能库目录
-	workingDir         string // 智能体工作目录（用于路径解析）
+	repo      repository.SkillRepository // 技能仓储
+	agentRepo repository.AgentRepository // 智能体仓储（获取关联）
+	agentID   string                     // 智能体ID
+	dataDir   string                     // 数据目录
 }
 
 // NewManager 创建技能管理器
-func NewManager(dataDir, workingDir string) *Manager {
-	// 工作空间技能目录在工作目录下的 skills 子目录
-	workspaceSkillsDir := filepath.Join(workingDir, "skills")
-	globalSkillsDir := filepath.Join(dataDir, "skills")
-	// 确保目录存在
-	os.MkdirAll(globalSkillsDir, 0755)
-	os.MkdirAll(workspaceSkillsDir, 0755)
-
-	slog.Info("global skills directory", "dir", globalSkillsDir)
-	slog.Info("workspace skills directory", "dir", workspaceSkillsDir)
-
+func NewManager(
+	repo repository.SkillRepository,
+	agentRepo repository.AgentRepository,
+	agentID string,
+	dataDir string,
+) *Manager {
 	return &Manager{
-		globalSkillsDir:    globalSkillsDir,
-		workspaceSkillsDir: workspaceSkillsDir,
-		workingDir:         workingDir,
+		repo:      repo,
+		agentRepo: agentRepo,
+		agentID:   agentID,
+		dataDir:   dataDir,
 	}
 }
 
-// parseSkillFromMD 从 SKILL.md 文件解析技能信息
-// 文件格式要求：
-// 第一行: # 技能名称
-// 第二行及之后直到空行: 技能描述
-// 其余内容: 详细指令
-func parseSkillFromMD(content, skillPath string) (*Skill, error) {
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("empty skill file: %s", skillPath)
-	}
-
-	skill := &Skill{
-		Path: skillPath,
-	}
-
-	// 解析名称（第一行 # 名称）
-	firstLine := strings.TrimSpace(lines[0])
-	if strings.HasPrefix(firstLine, "# ") {
-		skill.Name = strings.TrimSpace(strings.TrimPrefix(firstLine, "# "))
-	} else {
-		skill.Name = filepath.Base(filepath.Dir(skillPath))
-	}
-
-	// 解析描述（第二行开始到空行之前）
-	descLines := []string{}
-	for i := 1; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			break
-		}
-		descLines = append(descLines, line)
-	}
-	skill.Description = strings.Join(descLines, " ")
-
-	// 如果没有描述，使用默认描述
-	if skill.Description == "" {
-		skill.Description = "No description provided"
-	}
-
-	return skill, nil
-}
-
-// loadSkillsFromDir 从目录加载所有技能
-func (m *Manager) loadSkillsFromDir(dir, source string) ([]Skill, error) {
-	skills := []Skill{}
-
-	// 检查目录是否存在
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return skills, nil
-	}
-
-	// 遍历目录
-	entries, err := os.ReadDir(dir)
+// GetAgentSkills 获取智能体关联的所有可用技能
+// 返回：关联且状态为 active 的技能列表
+func (m *Manager) GetAgentSkills() ([]types.Skill, error) {
+	// 1. 获取智能体关联的技能ID列表
+	skillIDs, err := m.agentRepo.GetAgentSkills(m.agentID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read skills directory: %w", err)
+		return nil, fmt.Errorf("failed to get agent skills: %w", err)
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
+	if len(skillIDs) == 0 {
+		return []types.Skill{}, nil
+	}
 
-		// 检查是否存在 SKILL.md
-		skillFile := filepath.Join(dir, entry.Name(), "SKILL.md")
-		if _, err := os.Stat(skillFile); os.IsNotExist(err) {
-			continue
-		}
-
-		// 读取并解析 SKILL.md
-		content, err := os.ReadFile(skillFile)
-		if err != nil {
-			continue
-		}
-
-		skill, err := parseSkillFromMD(string(content), skillFile)
-		if err != nil {
-			continue
-		}
-
-		skill.Source = source
-
-		if source == "global" && m.globalSkillsDir != "" {
-			// 全局技能存放在公共目录，需要转成绝对路径
-			absPath, _ := filepath.Abs(skillFile)
-			skill.Path = absPath
-		} else if source == "workspace" {
-			// 工作目录了技能转换成相对路径
-			relPath, _ := filepath.Rel(m.workingDir, skillFile)
-			skill.Path = relPath
-		}
-
-		skills = append(skills, *skill)
+	// 2. 获取启用的技能
+	skills, err := m.repo.GetActiveByIDs(skillIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active skills: %w", err)
 	}
 
 	return skills, nil
 }
 
-// GetAllSkills 获取所有可用技能（全局 + 工作空间）
-func (m *Manager) GetAllSkills() ([]Skill, error) {
-	allSkills := []Skill{}
-
-	// 加载全局技能
-	if m.globalSkillsDir != "" {
-		globalSkills, err := m.loadSkillsFromDir(m.globalSkillsDir, "global")
-		if err != nil {
-			return nil, fmt.Errorf("failed to load global skills: %w", err)
-		}
-		allSkills = append(allSkills, globalSkills...)
-	}
-
-	// 加载工作空间技能
-	workspaceSkills, err := m.loadSkillsFromDir(m.workspaceSkillsDir, "workspace")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace skills: %w", err)
-	}
-	allSkills = append(allSkills, workspaceSkills...)
-
-	return allSkills, nil
-}
-
 // GenerateSkillsPrompt 生成技能提示词
+// 每次调用都会重新查询数据库，确保获取最新的技能状态
 func (m *Manager) GenerateSkillsPrompt() (string, error) {
-	skills, err := m.GetAllSkills()
+	skills, err := m.GetAgentSkills()
 	if err != nil {
 		return "", err
 	}
 
 	if len(skills) == 0 {
-		return "<skills>\n  <message>No skills are currently available.</message>\n</skills>", nil
+		return "<skills>\n  <message>当前没有可用的技能。</message>\n</skills>", nil
 	}
 
 	var sb strings.Builder
 	sb.WriteString("<skills>\n")
-	sb.WriteString("  <description>The following skills are available. Each skill has a SKILL.md file that contains detailed instructions.\n")
-	sb.WriteString("To use a skill, first use the read_file tool to read the SKILL.md file, then follow the instructions.</description>\n")
-	sb.WriteString("\n")
+	sb.WriteString("  <description>以下技能可用。每个技能有一个 SKILL.md 文件包含详细指令。\n")
+	sb.WriteString("要使用技能，首先使用 read_file 工具读取 SKILL.md 文件，然后按照指令执行。</description>\n\n")
 
 	for _, skill := range skills {
+		// 构建技能的 SKILL.md 完整路径
+		skillMDPath := filepath.Join(m.dataDir, "skills", skill.Path, "SKILL.md")
 		sb.WriteString("  <skill>\n")
 		sb.WriteString(fmt.Sprintf("    <name>%s</name>\n", escapeXML(skill.Name)))
 		sb.WriteString(fmt.Sprintf("    <description>%s</description>\n", escapeXML(skill.Description)))
-		sb.WriteString(fmt.Sprintf("    <path>%s</path>\n", escapeXML(skill.Path)))
+		sb.WriteString(fmt.Sprintf("    <path>%s</path>\n", escapeXML(skillMDPath)))
 		sb.WriteString("  </skill>\n")
 	}
 
-	sb.WriteString("\n")
-	sb.WriteString("  <usage>\n")
-	sb.WriteString("    1. Identify the skill you need from the list above\n")
-	sb.WriteString("    2. Use read_file tool with the skill's path to read detailed instructions\n")
-	sb.WriteString("    3. Follow the instructions in SKILL.md to complete the task\n")
+	sb.WriteString("\n  <usage>\n")
+	sb.WriteString("    1. 从上面的列表中识别你需要的技能\n")
+	sb.WriteString("    2. 使用 read_file 工具读取技能的 path 获取详细指令\n")
+	sb.WriteString("    3. 按照 SKILL.md 中的指令完成任务\n")
 	sb.WriteString("  </usage>\n")
 	sb.WriteString("</skills>")
 
@@ -200,20 +94,10 @@ func (m *Manager) GenerateSkillsPrompt() (string, error) {
 
 // escapeXML 转义 XML 特殊字符
 func escapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
+	s = strings.ReplaceAll(s, "&", "\u0026amp;")
+	s = strings.ReplaceAll(s, "<", "\u0026lt;")
+	s = strings.ReplaceAll(s, ">", "\u0026gt;")
+	s = strings.ReplaceAll(s, "\"", "\u0026quot;")
+	s = strings.ReplaceAll(s, "'", "\u0026apos;")
 	return s
-}
-
-// GetGlobalSkillsDir 获取全局技能目录
-func (m *Manager) GetGlobalSkillsDir() string {
-	return m.globalSkillsDir
-}
-
-// GetWorkspaceSkillsDir 获取工作空间技能目录
-func (m *Manager) GetWorkspaceSkillsDir() string {
-	return m.workspaceSkillsDir
 }

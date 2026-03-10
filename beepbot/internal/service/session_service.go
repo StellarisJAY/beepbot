@@ -109,6 +109,7 @@ type MessageListItem struct {
 	InputTokens  int64            `json:"input_tokens,omitempty"`
 	OutputTokens int64            `json:"output_tokens,omitempty"`
 	TotalTokens  int64            `json:"total_tokens,omitempty"`
+	InWindow     bool             `json:"in_window"`
 	CreatedAt    time.Time        `json:"created_at"`
 }
 
@@ -146,6 +147,7 @@ func (s *SessionService) GetSessionMessages(sessionID string, beforeID string, l
 			InputTokens:  msg.InputTokens,
 			OutputTokens: msg.OutputTokens,
 			TotalTokens:  msg.TotalTokens,
+			InWindow:     msg.InWindow,
 			CreatedAt:    msg.CreatedAt,
 		}
 		// 解析 ToolCalls JSON 字符串

@@ -197,6 +197,12 @@ onMounted(async () => {
                   </template>
                   {{ getRoleLabel(message.role) }}
                 </Tag>
+                <Tag v-if="message.in_window" color="success" class="window-tag">
+                  窗口内
+                </Tag>
+                <Tag v-else color="default" class="window-tag">
+                  已淘汰
+                </Tag>
                 <span class="message-time">{{ formatTime(message.created_at) }}</span>
                 <span v-if="message.total_tokens" class="message-tokens">
                   {{ message.total_tokens }} tokens
@@ -328,6 +334,10 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.window-tag {
+  font-size: 11px;
 }
 
 .message-time {

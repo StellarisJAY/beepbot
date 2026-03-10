@@ -56,9 +56,9 @@ export interface Agent {
   max_iterations: number
   max_output_tokens: number
   working_dir: string
-  context_window_size: number
   window_size: number
   compression_ratio: number
+  compression_keep_size: number
   context_max_tokens: number
   status: AgentStatus
   // 是否使用所有技能
@@ -77,9 +77,9 @@ export interface AgentDefaults {
   temperature: number
   max_iterations: number
   max_output_tokens: number
-  context_window_size: number
   window_size: number
   compression_ratio: number
+  compression_keep_size: number
   context_max_tokens: number
 }
 
@@ -105,9 +105,9 @@ export interface CreateAgentRequest {
   temperature?: number
   max_iterations?: number
   max_output_tokens?: number
-  context_window_size?: number
   window_size?: number
   compression_ratio?: number
+  compression_keep_size?: number
   context_max_tokens?: number
   // 技能配置
   use_all_skills?: boolean
@@ -127,9 +127,9 @@ export interface UpdateAgentRequest {
   max_iterations?: number
   max_output_tokens?: number
   working_dir?: string
-  context_window_size?: number
   window_size?: number
   compression_ratio?: number
+  compression_keep_size?: number
   context_max_tokens?: number
   status?: AgentStatus
   // 技能配置

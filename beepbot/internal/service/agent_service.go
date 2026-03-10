@@ -26,14 +26,14 @@ func NewAgentService(repo repository.AgentRepository, skillRepo repository.Skill
 
 // AgentDefaults 智能体默认配置
 type AgentDefaults struct {
-	SystemPrompt      string  `json:"system_prompt"`
-	Temperature       float32 `json:"temperature"`
-	MaxIterations     int     `json:"max_iterations"`
-	MaxOutputTokens   int64   `json:"max_output_tokens"`
-	ContextWindowSize int     `json:"context_window_size"`
-	WindowSize        int     `json:"window_size"`
-	CompressionRatio  float64 `json:"compression_ratio"`
-	ContextMaxTokens  int64   `json:"context_max_tokens"`
+	SystemPrompt        string  `json:"system_prompt"`
+	Temperature         float32 `json:"temperature"`
+	MaxIterations       int     `json:"max_iterations"`
+	MaxOutputTokens     int64   `json:"max_output_tokens"`
+	WindowSize          int     `json:"window_size"`
+	CompressionRatio    float64 `json:"compression_ratio"`
+	CompressionKeepSize int     `json:"compression_keep_size"`
+	ContextMaxTokens    int64   `json:"context_max_tokens"`
 }
 
 // ValidationResult 校验结果
@@ -44,14 +44,14 @@ type ValidationResult struct {
 
 // 默认配置常量
 const (
-	DefaultSystemPrompt      = "你是一名智能助手"
-	DefaultTemperature       = 0.7
-	DefaultMaxIterations     = 50
-	DefaultMaxOutputTokens   = 4096
-	DefaultContextWindowSize = 20
-	DefaultWindowSize        = 20
-	DefaultCompressionRatio  = 0.7
-	DefaultContextMaxTokens  = 4096
+	DefaultSystemPrompt        = "你是一名智能助手"
+	DefaultTemperature         = 0.7
+	DefaultMaxIterations       = 50
+	DefaultMaxOutputTokens     = 4096
+	DefaultWindowSize          = 20
+	DefaultCompressionRatio    = 0.7
+	DefaultCompressionKeepSize = 5
+	DefaultContextMaxTokens    = 4096
 )
 
 // CreateAgentRequest 创建智能体请求
@@ -59,18 +59,17 @@ type CreateAgentRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	// 以下字段可选，创建时可留空
-	ProviderID      string  `json:"provider_id"`
-	Model           string  `json:"model"`
-	SystemPrompt    string  `json:"system_prompt"`
-	WorkingDir      string  `json:"working_dir"`
-	Temperature     float32 `json:"temperature"`
-	MaxIterations   int     `json:"max_iterations"`
-	MaxOutputTokens int64   `json:"max_output_tokens"`
-	// ... 其他参数使用默认值
-	ContextWindowSize int     `json:"context_window_size"`
-	WindowSize        int     `json:"window_size"`
-	CompressionRatio  float64 `json:"compression_ratio"`
-	ContextMaxTokens  int64   `json:"context_max_tokens"`
+	ProviderID          string  `json:"provider_id"`
+	Model               string  `json:"model"`
+	SystemPrompt        string  `json:"system_prompt"`
+	WorkingDir          string  `json:"working_dir"`
+	Temperature         float32 `json:"temperature"`
+	MaxIterations       int     `json:"max_iterations"`
+	MaxOutputTokens     int64   `json:"max_output_tokens"`
+	WindowSize          int     `json:"window_size"`
+	CompressionRatio    float64 `json:"compression_ratio"`
+	CompressionKeepSize int     `json:"compression_keep_size"`
+	ContextMaxTokens    int64   `json:"context_max_tokens"`
 	// UseAllSkills 是否使用所有技能（默认 true）
 	UseAllSkills bool `json:"use_all_skills"`
 	// SkillIDs 关联的技能ID列表
@@ -80,14 +79,14 @@ type CreateAgentRequest struct {
 // GetAgentDefaults 获取智能体默认配置
 func (s *AgentService) GetAgentDefaults() *AgentDefaults {
 	return &AgentDefaults{
-		SystemPrompt:      DefaultSystemPrompt,
-		Temperature:       DefaultTemperature,
-		MaxIterations:     DefaultMaxIterations,
-		MaxOutputTokens:   DefaultMaxOutputTokens,
-		ContextWindowSize: DefaultContextWindowSize,
-		WindowSize:        DefaultWindowSize,
-		CompressionRatio:  DefaultCompressionRatio,
-		ContextMaxTokens:  DefaultContextMaxTokens,
+		SystemPrompt:        DefaultSystemPrompt,
+		Temperature:         DefaultTemperature,
+		MaxIterations:       DefaultMaxIterations,
+		MaxOutputTokens:     DefaultMaxOutputTokens,
+		WindowSize:          DefaultWindowSize,
+		CompressionRatio:    DefaultCompressionRatio,
+		CompressionKeepSize: DefaultCompressionKeepSize,
+		ContextMaxTokens:    DefaultContextMaxTokens,
 	}
 }
 
@@ -113,20 +112,20 @@ func (s *AgentService) ValidateAgentConfig(agent *AgentResponse) *ValidationResu
 
 // UpdateAgentRequest 更新智能体请求
 type UpdateAgentRequest struct {
-	Name              string            `json:"name"`
-	Description       string            `json:"description"`
-	ProviderID        string            `json:"provider_id"`
-	Model             string            `json:"model"`
-	SystemPrompt      string            `json:"system_prompt"`
-	Temperature       float32           `json:"temperature"`
-	MaxIterations     int               `json:"max_iterations"`
-	MaxOutputTokens   int64             `json:"max_output_tokens"`
-	WorkingDir        string            `json:"working_dir"`
-	ContextWindowSize int               `json:"context_window_size"`
-	WindowSize        int               `json:"window_size"`
-	CompressionRatio  float64           `json:"compression_ratio"`
-	ContextMaxTokens  int64             `json:"context_max_tokens"`
-	Status            types.AgentStatus `json:"status"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	ProviderID          string            `json:"provider_id"`
+	Model               string            `json:"model"`
+	SystemPrompt        string            `json:"system_prompt"`
+	Temperature         float32           `json:"temperature"`
+	MaxIterations       int               `json:"max_iterations"`
+	MaxOutputTokens     int64             `json:"max_output_tokens"`
+	WorkingDir          string            `json:"working_dir"`
+	WindowSize          int               `json:"window_size"`
+	CompressionRatio    float64           `json:"compression_ratio"`
+	CompressionKeepSize int               `json:"compression_keep_size"`
+	ContextMaxTokens    int64             `json:"context_max_tokens"`
+	Status              types.AgentStatus `json:"status"`
 	// UseAllSkills 是否使用所有技能
 	UseAllSkills *bool `json:"use_all_skills,omitempty"`
 	// SkillIDs 关联的技能ID列表（仅当 use_all_skills 为 false 时有效）
@@ -142,22 +141,22 @@ type SkillBrief struct {
 
 // AgentResponse 智能体响应
 type AgentResponse struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Description       string            `json:"description"`
-	ProviderID        string            `json:"provider_id"`
-	Provider          *ProviderResponse `json:"provider,omitempty"`
-	Model             string            `json:"model"`
-	SystemPrompt      string            `json:"system_prompt"`
-	Temperature       float32           `json:"temperature"`
-	MaxIterations     int               `json:"max_iterations"`
-	MaxOutputTokens   int64             `json:"max_output_tokens"`
-	WorkingDir        string            `json:"working_dir"`
-	ContextWindowSize int               `json:"context_window_size"`
-	WindowSize        int               `json:"window_size"`
-	CompressionRatio  float64           `json:"compression_ratio"`
-	ContextMaxTokens  int64             `json:"context_max_tokens"`
-	Status            types.AgentStatus `json:"status"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	ProviderID          string            `json:"provider_id"`
+	Provider            *ProviderResponse `json:"provider,omitempty"`
+	Model               string            `json:"model"`
+	SystemPrompt        string            `json:"system_prompt"`
+	Temperature         float32           `json:"temperature"`
+	MaxIterations       int               `json:"max_iterations"`
+	MaxOutputTokens     int64             `json:"max_output_tokens"`
+	WorkingDir          string            `json:"working_dir"`
+	WindowSize          int               `json:"window_size"`
+	CompressionRatio    float64           `json:"compression_ratio"`
+	CompressionKeepSize int               `json:"compression_keep_size"`
+	ContextMaxTokens    int64             `json:"context_max_tokens"`
+	Status              types.AgentStatus `json:"status"`
 	// UseAllSkills 是否使用所有技能
 	UseAllSkills bool `json:"use_all_skills"`
 	// Skills 关联的技能列表（简要信息）
@@ -209,10 +208,6 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 	if maxOutputTokens == 0 {
 		maxOutputTokens = defaults.MaxOutputTokens
 	}
-	contextWindowSize := req.ContextWindowSize
-	if contextWindowSize == 0 {
-		contextWindowSize = defaults.ContextWindowSize
-	}
 	windowSize := req.WindowSize
 	if windowSize == 0 {
 		windowSize = defaults.WindowSize
@@ -221,30 +216,34 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 	if compressionRatio == 0 {
 		compressionRatio = defaults.CompressionRatio
 	}
+	compressionKeepSize := req.CompressionKeepSize
+	if compressionKeepSize == 0 {
+		compressionKeepSize = defaults.CompressionKeepSize
+	}
 	contextMaxTokens := req.ContextMaxTokens
 	if contextMaxTokens == 0 {
 		contextMaxTokens = defaults.ContextMaxTokens
 	}
 
 	agent := &types.Agent{
-		ID:                agentID,
-		Name:              req.Name,
-		Description:       req.Description,
-		ProviderID:        req.ProviderID, // 可为空
-		Model:             req.Model,      // 可为空
-		SystemPrompt:      systemPrompt,
-		Temperature:       temperature,
-		MaxIterations:     maxIterations,
-		MaxOutputTokens:   maxOutputTokens,
-		WorkingDir:        workingDir,
-		ContextWindowSize: contextWindowSize,
-		WindowSize:        windowSize,
-		CompressionRatio:  compressionRatio,
-		ContextMaxTokens:  contextMaxTokens,
-		Status:            types.AgentStatusInactive, // 默认禁用，配置完成后启用
-		UseAllSkills:      req.UseAllSkills,          // 默认为 false，前端应传 true
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
+		ID:                  agentID,
+		Name:                req.Name,
+		Description:         req.Description,
+		ProviderID:          req.ProviderID, // 可为空
+		Model:               req.Model,      // 可为空
+		SystemPrompt:        systemPrompt,
+		Temperature:         temperature,
+		MaxIterations:       maxIterations,
+		MaxOutputTokens:     maxOutputTokens,
+		WorkingDir:          workingDir,
+		WindowSize:          windowSize,
+		CompressionRatio:    compressionRatio,
+		CompressionKeepSize: compressionKeepSize,
+		ContextMaxTokens:    contextMaxTokens,
+		Status:              types.AgentStatusInactive, // 默认禁用，配置完成后启用
+		UseAllSkills:        req.UseAllSkills,          // 默认为 false，前端应传 true
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
 	}
 
 	if err := s.repo.Create(agent); err != nil {
@@ -314,16 +313,16 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 		agent.WorkingDir = req.WorkingDir
 	}
 
-	if req.ContextWindowSize != 0 {
-		agent.ContextWindowSize = req.ContextWindowSize
-	}
-
 	if req.WindowSize != 0 {
 		agent.WindowSize = req.WindowSize
 	}
 
 	if req.CompressionRatio != 0 {
 		agent.CompressionRatio = req.CompressionRatio
+	}
+
+	if req.CompressionKeepSize != 0 {
+		agent.CompressionKeepSize = req.CompressionKeepSize
 	}
 
 	if req.ContextMaxTokens != 0 {
@@ -451,24 +450,24 @@ func (s *AgentService) GetAgentEntityWithProvider(id string) (*types.Agent, erro
 // toResponse 转换为响应格式
 func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 	return &AgentResponse{
-		ID:                agent.ID,
-		Name:              agent.Name,
-		Description:       agent.Description,
-		ProviderID:        agent.ProviderID,
-		Model:             agent.Model,
-		SystemPrompt:      agent.SystemPrompt,
-		Temperature:       agent.Temperature,
-		MaxIterations:     agent.MaxIterations,
-		MaxOutputTokens:   agent.MaxOutputTokens,
-		WorkingDir:        agent.WorkingDir,
-		ContextWindowSize: agent.ContextWindowSize,
-		WindowSize:        agent.WindowSize,
-		CompressionRatio:  agent.CompressionRatio,
-		ContextMaxTokens:  agent.ContextMaxTokens,
-		Status:            agent.Status,
-		UseAllSkills:      agent.UseAllSkills,
-		CreatedAt:         agent.CreatedAt,
-		UpdatedAt:         agent.UpdatedAt,
+		ID:                  agent.ID,
+		Name:                agent.Name,
+		Description:         agent.Description,
+		ProviderID:          agent.ProviderID,
+		Model:               agent.Model,
+		SystemPrompt:        agent.SystemPrompt,
+		Temperature:         agent.Temperature,
+		MaxIterations:       agent.MaxIterations,
+		MaxOutputTokens:     agent.MaxOutputTokens,
+		WorkingDir:          agent.WorkingDir,
+		WindowSize:          agent.WindowSize,
+		CompressionRatio:    agent.CompressionRatio,
+		CompressionKeepSize: agent.CompressionKeepSize,
+		ContextMaxTokens:    agent.ContextMaxTokens,
+		Status:              agent.Status,
+		UseAllSkills:        agent.UseAllSkills,
+		CreatedAt:           agent.CreatedAt,
+		UpdatedAt:           agent.UpdatedAt,
 	}
 }
 

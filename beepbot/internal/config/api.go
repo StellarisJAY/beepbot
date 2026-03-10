@@ -18,6 +18,7 @@ type DatabaseConfig struct {
 	Password string `json:"password"`
 	DBName   string `json:"dbname"`
 	SSLMode  string `json:"sslmode"`
+	Migrate  bool   `json:"migrate"` // 是否自动迁移数据库
 }
 
 // EncryptionConfig 加密配置

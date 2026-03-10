@@ -39,20 +39,22 @@ func InitDatabase(cfg config.DatabaseConfig, loggingConfig config.Logging) (*gor
 
 	slog.Info("Connected to PostgreSQL database", "host", cfg.Host, "dbname", cfg.DBName)
 
-	// 自动迁移
-	err = db.AutoMigrate(
-		&types.Provider{},
-		&types.Agent{},
-		&types.Bot{},
-		&types.Session{},
-		&types.SessionMessage{},
-		&types.CronJob{},
-		&types.Skill{},
-		&types.SkillFile{},
-		&types.AgentSkill{},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to migrate database: %w", err)
+	if cfg.Migrate == true {
+		// 自动迁移
+		err = db.AutoMigrate(
+			&types.Provider{},
+			&types.Agent{},
+			&types.Bot{},
+			&types.Session{},
+			&types.SessionMessage{},
+			&types.CronJob{},
+			&types.Skill{},
+			&types.SkillFile{},
+			&types.AgentSkill{},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to migrate database: %w", err)
+		}
 	}
 
 	slog.Info("Database migration completed")

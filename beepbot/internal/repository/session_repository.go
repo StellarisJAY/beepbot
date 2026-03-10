@@ -40,6 +40,14 @@ type SessionRepository interface {
 
 	// Token 用量
 	GetTokenUsage(sessionID string) (int64, error)
+
+	// 窗口内消息操作
+	CountMessagesInWindow(sessionID string) (int64, error)
+	GetTokenUsageInWindow(sessionID string) (int64, error)
+	GetOldestMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
+	GetMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
+	EvictMessages(sessionID string, messageIDs []string) error
+	EvictOldestMessagesInWindow(sessionID string, count int) error
 }
 
 // SessionRepositoryImpl 会话仓储实现
@@ -280,4 +288,72 @@ func (r *SessionRepositoryImpl) GetSessionStats(sessionIDs []string) (map[string
 	}
 
 	return result, nil
+}
+
+// CountMessagesInWindow 统计窗口内消息数量
+func (r *SessionRepositoryImpl) CountMessagesInWindow(sessionID string) (int64, error) {
+	var count int64
+	err := r.db.Model(&types.SessionMessage{}).
+		Where("session_id = ? AND in_window = ?", sessionID, true).
+		Count(&count).Error
+	return count, err
+}
+
+// GetTokenUsageInWindow 获取窗口内的 token 用量
+func (r *SessionRepositoryImpl) GetTokenUsageInWindow(sessionID string) (int64, error) {
+	var total int64
+	err := r.db.Model(&types.SessionMessage{}).
+		Where("session_id = ? AND in_window = ?", sessionID, true).
+		Select("COALESCE(SUM(total_tokens), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+// GetOldestMessagesInWindow 获取窗口内最早的消息
+func (r *SessionRepositoryImpl) GetOldestMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error) {
+	var messages []types.SessionMessage
+	err := r.db.Where("session_id = ? AND in_window = ?", sessionID, true).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&messages).Error
+	return messages, err
+}
+
+// GetMessagesInWindow 获取窗口内消息（按创建时间升序）
+func (r *SessionRepositoryImpl) GetMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error) {
+	var messages []types.SessionMessage
+	query := r.db.Where("session_id = ? AND in_window = ?", sessionID, true).Order("created_at ASC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Find(&messages).Error
+	return messages, err
+}
+
+// EvictMessages 标记消息为窗口外
+func (r *SessionRepositoryImpl) EvictMessages(sessionID string, messageIDs []string) error {
+	return r.db.Model(&types.SessionMessage{}).
+		Where("session_id = ? AND id IN ?", sessionID, messageIDs).
+		Update("in_window", false).Error
+}
+
+// EvictOldestMessagesInWindow 标记窗口内最早的 N 条消息为窗口外
+func (r *SessionRepositoryImpl) EvictOldestMessagesInWindow(sessionID string, count int) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var ids []string
+		err := tx.Model(&types.SessionMessage{}).
+			Where("session_id = ? AND in_window = ?", sessionID, true).
+			Order("created_at ASC").
+			Limit(count).
+			Pluck("id", &ids).Error
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		return tx.Model(&types.SessionMessage{}).
+			Where("id IN ?", ids).
+			Update("in_window", false).Error
+	})
 }
