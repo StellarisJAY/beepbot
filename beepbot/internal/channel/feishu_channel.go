@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/StellarisJAY/beepbot/internal/config"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
@@ -29,32 +28,6 @@ type FeishuChannel struct {
 
 	allowedUsers  map[string]struct{}
 	allowedGroups map[string]struct{}
-}
-
-// NewFeishuChannelFromConfig 在 standalone 模式下从配置文件创建 Channel
-func NewFeishuChannelFromConfig(cfg config.StandaloneConfig, bus *MessageBus) Channel {
-	if cfg.ChannelConfig.Feishu == nil {
-		return nil
-	}
-	feishuCfg := cfg.ChannelConfig.Feishu
-
-	allowedUsers := make(map[string]struct{})
-	allowedGroups := make(map[string]struct{})
-	for _, u := range feishuCfg.AllowedUsers {
-		allowedUsers[u] = struct{}{}
-	}
-	for _, g := range feishuCfg.AllowedGroups {
-		allowedGroups[g] = struct{}{}
-	}
-
-	return &FeishuChannel{
-		BaseChannel:   NewBaseChannel("feishu/standalone", bus),
-		appID:         feishuCfg.AppID,
-		appSecret:     feishuCfg.AppSecret,
-		encryptKey:    feishuCfg.EncryptKey,
-		allowedUsers:  allowedUsers,
-		allowedGroups: allowedGroups,
-	}
 }
 
 // NewFeishuChannel 在 API 模式下通过 channel 配置创建

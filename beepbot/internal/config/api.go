@@ -24,3 +24,17 @@ type DatabaseConfig struct {
 type EncryptionConfig struct {
 	Key string `json:"key"` // Base64 编码的加密密钥，可选
 }
+
+// Logging 日志配置
+type Logging struct {
+	Level  string         `json:"level"`
+	File   string         `json:"file"`
+	Format string         `json:"format"`
+	QQ     ChannelLogging `json:"qq"`
+}
+
+// ChannelLogging 频道日志配置
+type ChannelLogging struct {
+	Level string `json:"level"`
+	File  string `json:"file"`
+}

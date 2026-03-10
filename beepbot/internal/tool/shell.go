@@ -7,11 +7,8 @@ import (
 	"log/slog"
 	"os/exec"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
-
-	"github.com/StellarisJAY/beepbot/internal/config"
 )
 
 // 无论用户如何配置, 绝对禁止的命令
@@ -205,30 +202,6 @@ func (s *ShellTool) Parameters() map[string]any {
 		},
 		"required": []string{"command"},
 	}
-}
-
-// NewShellToolFromStandalone 从standalone模式创建shell工具，配置从配置文件导入
-func NewShellToolFromStandalone(config config.StandaloneConfig) Tool {
-	shellToolConfig := config.BuiltinTools.Shell
-	timeout, err := time.ParseDuration(shellToolConfig.Timeout)
-	if err != nil {
-		slog.Error("Invalid shell tool timeout, using default", "invalid", config.BuiltinTools.Shell.Timeout, "default", "30s")
-		timeout = 30 * time.Second
-	}
-
-	// 合并配置的禁用命令和系统强制禁用命令
-	forbiddenCommands := shellToolConfig.ForbiddenCommands
-	forbiddenCommands = append(forbiddenCommands, mustForbiddenCommands...)
-	forbiddenCommands = slices.Compact(forbiddenCommands)
-
-	tool := &ShellTool{
-		forbiddenCommands: forbiddenCommands,
-		timeout:           timeout,
-		workingDir:        config.AgentConfig.WorkingDir,
-		system:            runtime.GOOS,
-	}
-	tool.description = tool.buildDescription()
-	return tool
 }
 
 // NewShellToolFromApi 从api服务创建的shell工具，配置从数据库导入

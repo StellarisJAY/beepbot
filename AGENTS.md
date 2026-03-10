@@ -4,7 +4,7 @@
 
 BeepBot 是一个 AI 代理机器人项目，包含后端服务和前端仪表板。后端使用 Go 语言编写，通过多种消息渠道提供智能对话能力；前端使用 Vue 3 构建，提供管理界面。
 
-后端支持 OpenAI 和 DashScope（阿里云）等 LLM 提供商，可通过 QQ 机器人 API 或控制台界面与用户交互。具有 ReAct 风格的代理循环和工具调用能力，可以执行 shell 命令、读写文件、管理任务列表、收集系统信息，帮助用户完成各种任务。
+后端支持 OpenAI、DashScope（阿里云）、Ollama 等 LLM 提供商，可通过 QQ 机器人、飞书机器人与用户交互。具有 ReAct 风格的代理循环和工具调用能力，可以执行 shell 命令、读写文件、管理任务列表、收集系统信息、管理定时任务，帮助用户完成各种任务。
 
 ## 项目结构
 
@@ -12,60 +12,75 @@ BeepBot 是一个 AI 代理机器人项目，包含后端服务和前端仪表�
 beepbot/                          # 项目根目录
 ├── beepbot/                      # 后端 Go 项目
 │   ├── cmd/
-│   │   ├── api/
-│   │   │   └── main.go           # API 服务入口点
-│   │   └── standalone/
-│   │       └── main.go           # 独立模式入口点
+│   │   └── api/
+│   │       └── main.go           # API 服务入口点
 │   ├── internal/
 │   │   ├── agent/
 │   │   │   ├── agent.go          # 核心代理循环和消息处理
-│   │   │   ├── context.go        # 代理上下文管理
-│   │   │   └── standalone.go     # 独立模式代理
+│   │   │   ├── api.go            # API 模式 AgentRunner
+│   │   │   └── context.go        # 代理上下文管理
 │   │   ├── api/
 │   │   │   ├── agent_handler.go  # Agent API 处理器
+│   │   │   ├── bot_handler.go    # Bot API 处理器
+│   │   │   ├── cron_handler.go   # Cron API 处理器
 │   │   │   ├── provider_handler.go # Provider API 处理器
+│   │   │   ├── session_handler.go # Session API 处理器
+│   │   │   ├── skill_handler.go  # Skill API 处理器
 │   │   │   ├── response.go       # API 响应工具
 │   │   │   └── router.go         # 路由定义
 │   │   ├── channel/
-│   │   │   ├── channel.go        # 渠道接口和管理器
+│   │   │   ├── channel.go        # 渠道接口
+│   │   │   ├── channel_manager.go # Channel 管理器
+│   │   │   ├── config.go         # Channel 配置
+│   │   │   ├── constants.go      # 常量定义
+│   │   │   ├── factory.go        # Channel 工厂
+│   │   │   ├── feishu_channel.go # 飞书机器人渠道实现
 │   │   │   ├── message_bus.go    # 入站/出站消息总线
 │   │   │   ├── qq_channel.go     # QQ 机器人渠道实现
+│   │   │   ├── registry.go       # Channel 注册表
 │   │   │   └── system_channel.go # 系统/内部渠道
 │   │   ├── config/
 │   │   │   ├── config.go         # 配置结构和加载
-│   │   │   ├── api.go            # API 模式配置
-│   │   │   └── standalone.go     # 独立模式配置
+│   │   │   └── api.go            # API 模式配置
+│   │   ├── cron/
+│   │   │   └── scheduler.go      # 定时任务调度器
 │   │   ├── crypto/
 │   │   │   └── encryption.go     # 加密工具
 │   │   ├── database/
 │   │   │   └── database.go       # 数据库连接和管理
-│   │   ├── heartbeat/
-│   │   │   └── heartbeat.go      # 定期心跳任务调度器
 │   │   ├── logger/
 │   │   │   ├── logger.go         # 日志初始化
 │   │   │   └── qq.go             # QQ 渠道专用日志
 │   │   ├── mcp/
 │   │   │   └── mcp.go            # MCP（模型上下文协议）- 占位符
-│   │   ├── memory/
-│   │   │   ├── base.go           # 内存管理器工厂
-│   │   │   ├── flash.go          # 内存（闪存）存储
-│   │   │   └── milvus.go         # Milvus 向量数据库（占位符）
 │   │   ├── provider/
 │   │   │   ├── base.go           # LLM 提供商工厂
 │   │   │   └── openai.go         # OpenAI 兼容提供商实现
 │   │   ├── repository/
 │   │   │   ├── repository.go     # 仓储基类
 │   │   │   ├── agent_repository.go # Agent 仓储
-│   │   │   └── provider_repository.go # Provider 仓储
+│   │   │   ├── bot_repository.go # Bot 仓储
+│   │   │   ├── cron_repository.go # Cron 仓储
+│   │   │   ├── provider_repository.go # Provider 仓储
+│   │   │   ├── session_repository.go # Session 仓储
+│   │   │   └── skill_repository.go # Skill 仓储
 │   │   ├── service/
+│   │   │   ├── agent_manager.go  # Agent 管理器
 │   │   │   ├── agent_service.go  # Agent 服务层
-│   │   │   └── provider_service.go # Provider 服务层
+│   │   │   ├── bot_service.go    # Bot 服务层
+│   │   │   ├── cron_service.go   # Cron 服务层
+│   │   │   ├── provider_service.go # Provider 服务层
+│   │   │   ├── session_service.go # Session 服务层
+│   │   │   └── skill_service.go  # Skill 服务层
 │   │   ├── session/
-│   │   │   └── session.go        # 会话管理
+│   │   │   ├── session.go        # 会话接口
+│   │   │   └── api.go            # API 模式会话实现
 │   │   ├── skill/
 │   │   │   └── skill.go          # 技能管理系统
 │   │   ├── tool/
 │   │   │   ├── base.go           # 工具接口定义
+│   │   │   ├── cron.go           # 定时任务工具
+│   │   │   ├── cron_validator.go # Cron 表达式验证
 │   │   │   ├── file_system.go    # 文件读/写/列表/编辑工具
 │   │   │   ├── message.go        # 消息工具
 │   │   │   ├── shell.go          # Shell 执行工具
@@ -74,11 +89,14 @@ beepbot/                          # 项目根目录
 │   │   │   └── tool_registry.go  # 工具注册表
 │   │   └── types/
 │   │       ├── agent.go          # Agent 相关类型
+│   │       ├── agent_skill.go    # Agent-Skill 关联
 │   │       ├── base.go           # 基础类型
+│   │       ├── bot.go            # Bot 相关类型
 │   │       ├── cron.go           # Cron 相关类型
 │   │       ├── memory.go         # 内存接口和类型
 │   │       ├── provider.go       # LLM 提供商接口和消息类型
-│   │       └── session.go        # 会话数据库模型
+│   │       ├── session.go        # 会话数据库模型
+│   │       └── skill.go          # Skill 相关类型
 │   ├── config.example.json       # 配置示例
 │   ├── go.mod                    # Go 模块定义
 │   └── .gitignore                # Git 忽略文件
@@ -86,11 +104,21 @@ beepbot/                          # 项目根目录
 │   ├── src/
 │   │   ├── App.vue               # 根组件
 │   │   ├── main.ts               # 应用入口
+│   │   ├── api/                  # API 请求模块
+│   │   │   ├── agent.ts          # Agent API
+│   │   │   ├── bot.ts            # Bot API
+│   │   │   ├── cron.ts           # Cron API
+│   │   │   ├── provider.ts       # Provider API
+│   │   │   ├── session.ts        # Session API
+│   │   │   └── skill.ts          # Skill API
 │   │   ├── assets/
 │   │   │   └── styles/           # 样式文件
 │   │   │       ├── variables.css # CSS 变量（主题色）
 │   │   │       └── global.css    # 全局样式
 │   │   ├── components/
+│   │   │   ├── AgentCreateModal.vue # 智能体创建模态框
+│   │   │   ├── BotFormModal.vue  # 机器人表单模态框
+│   │   │   ├── MarkdownRenderer.vue # Markdown 渲染组件
 │   │   │   └── layout/           # 布局组件
 │   │   │       ├── AppLayout.vue # 整体布局容器
 │   │   │       ├── Header.vue    # 头部栏组件
@@ -98,17 +126,37 @@ beepbot/                          # 项目根目录
 │   │   ├── router/
 │   │   │   └── index.ts          # Vue Router 配置
 │   │   ├── stores/               # Pinia 状态管理
+│   │   │   ├── counter.ts        # 计数器状态
 │   │   │   ├── theme.ts          # 主题状态
 │   │   │   └── sidebar.ts        # 侧边栏折叠状态
+│   │   ├── types/                # TypeScript 类型定义
+│   │   │   ├── agent.ts
+│   │   │   ├── bot.ts
+│   │   │   ├── cron.ts
+│   │   │   ├── provider.ts
+│   │   │   ├── session.ts
+│   │   │   └── skill.ts
+│   │   ├── utils/
+│   │   │   └── http.ts           # HTTP 请求工具
 │   │   └── views/                # 页面组件
 │   │       ├── agents/
-│   │       │   └── AgentList.vue # 智能体列表页
-│   │       ├── providers/
-│   │       │   └── ProviderList.vue # 模型供应商列表页
+│   │       │   ├── AgentList.vue # 智能体列表页
+│   │       │   ├── AgentConfig.vue # 智能体配置页
+│   │       │   ├── AgentDetailLayout.vue # 智能体详情布局
+│   │       │   ├── AgentLogs.vue # 智能体日志页
+│   │       │   ├── AgentMonitor.vue # 智能体监控页
+│   │       │   └── SessionMessages.vue # 会话消息页
 │   │       ├── bots/
 │   │       │   └── BotList.vue   # IM机器人列表页
-│   │       └── settings/
-│   │           └── Settings.vue  # 全局设置页
+│   │       ├── crons/
+│   │       │   └── CronList.vue  # 定时任务列表页
+│   │       ├── providers/
+│   │       │   └── ProviderList.vue # 模型供应商列表页
+│   │       ├── settings/
+│   │       │   └── Settings.vue  # 全局设置页
+│   │       └── skills/
+│   │           ├── SkillList.vue # 技能列表页
+│   │           └── SkillDetail.vue # 技能详情页
 │   ├── public/                   # 静态资源
 │   ├── index.html                # HTML 入口
 │   ├── vite.config.ts            # Vite 配置
@@ -132,10 +180,12 @@ beepbot/                          # 项目根目录
 
 ### 后端 (beepbot/)
 - **语言**: Go 1.24.5
-- **LLM 提供商**: OpenAI API 兼容 (OpenAI, DashScope)
-- **消息渠道**: QQ 机器人 (腾讯), 控制台
+- **LLM 提供商**: OpenAI API 兼容 (OpenAI, DashScope, Ollama)
+- **消息渠道**: QQ 机器人 (腾讯), 飞书机器人
+- **数据库**: PostgreSQL (使用 GORM)
 - **主要依赖**:
   - `github.com/tencent-connect/botgo` - QQ 机器人 SDK
+  - `github.com/larksuite/oapi-sdk-go/v3` - 飞书 SDK
   - `github.com/openai/openai-go/v3` - OpenAI 客户端
   - `gorm.io/gorm` - 数据库 ORM
   - `github.com/google/uuid` - UUID 生成
@@ -159,7 +209,7 @@ beepbot/                          # 项目根目录
 
 #### 前置条件
 - Go 1.24.5 或更高版本
-- SQLite 支持
+- PostgreSQL 数据库
 
 #### 构建
 ```bash
@@ -167,9 +217,6 @@ cd beepbot
 
 # 构建 API 服务
 go build -o beepbot-api.exe ./cmd/api
-
-# 构建独立模式
-go build -o beepbot-standalone.exe ./cmd/standalone
 ```
 
 #### 运行
@@ -177,10 +224,7 @@ go build -o beepbot-standalone.exe ./cmd/standalone
 cd beepbot
 
 # 运行 API 服务
-./beepbot-api.exe
-
-# 运行独立模式
-./beepbot-standalone.exe -config /path/to/config.json
+./beepbot-api.exe -config /path/to/config.json
 ```
 
 ### 前端
@@ -228,35 +272,19 @@ pnpm format    # 使用 Prettier 格式化
 
 ```json
 {
-  "providers": {
-    "dashscope": {
-      "api_key": "your_api_key",
-      "base_url": "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"
-    },
-    "openai": {
-      "api_key": "your_api_key",
-      "base_url": "https://api.openai.com/v1"
-    }
+  "port": 8080,
+  "beepbot_data_dir": "/data/beepbot",
+  "database": {
+    "type": "postgres",
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "password": "password",
+    "dbname": "beepbot",
+    "sslmode": "disable"
   },
-  "agent": {
-    "provider": "dashscope",
-    "model": "qwen3.5-plus",
-    "temperature": 0.2,
-    "max_iterations": 50,
-    "max_tokens": 4096,
-    "system_prompt": "你是一个有用的助手。",
-    "working_dir": "D:/data/beepbot"
-  },
-  "memory": {
-    "window_size": 20,
-    "flash": {}
-  },
-  "channel": {
-    "console": {},
-    "qq": {
-      "app_id": "your_app_id",
-      "app_secret": "your_app_secret"
-    }
+  "encryption": {
+    "key": ""
   },
   "logging": {
     "level": "info",
@@ -266,79 +294,72 @@ pnpm format    # 使用 Prettier 格式化
       "level": "info",
       "file": "./logs/qq_channel.log"
     }
-  },
-  "builtin_tools": {
-    "shell": {
-      "enable": true,
-      "forbidden_commands": ["sudo", "su", "rm", "chmod", "chown"],
-      "timeout": "30s"
-    }
-  },
-  "heart_beat": {
-    "enable": true,
-    "interval": "60s",
-    "heart_beat_file": "./beepbot/HEARTBEAT.md"
-  },
-  "beepbot_data_dir": "./beepbot"
+  }
 }
 ```
 
 ### 配置字段
 
-- **providers**: LLM 提供商配置
-  - `dashscope`: 阿里云 DashScope API 设置
-  - `openai`: OpenAI API 设置
-
-- **agent**: 代理行为设置
-  - `provider`: 要使用的 LLM 提供商 ("openai" 或 "dashscope")
-  - `model`: 模型标识符
-  - `temperature`: 采样温度 (0.0 - 2.0)
-  - `max_iterations`: 每次请求的最大工具调用迭代次数
-  - `max_tokens`: 每次响应的最大 token 数
-  - `system_prompt`: 代理的系统提示词
-  - `working_dir`: 文件操作的工作目录（隔离）
-
-- **memory**: 内存管理设置
-  - `window_size`: 消息历史窗口大小
-  - `flash`: 使用内存存储（易失性）
-  - `milvus`: Milvus 向量数据库配置（可选）
-
-- **channel**: 消息渠道设置
-  - `console`: 控制台渠道（如果存在则始终启用）
-  - `qq`: QQ 机器人渠道设置（需要 app_id 和 app_secret）
-
+- **port**: API 服务端口
+- **beepbot_data_dir**: BeepBot 公共数据目录，用于存储全局技能、共享数据等
+- **database**: 数据库配置
+  - `type`: 数据库类型 (postgres)
+  - `host`: 数据库主机
+  - `port`: 数据库端口
+  - `user`: 数据库用户
+  - `password`: 数据库密码
+  - `dbname`: 数据库名称
+  - `sslmode`: SSL 模式
+- **encryption**: 加密配置
+  - `key`: Base64 编码的加密密钥（可选，不提供则自动生成）
 - **logging**: 日志配置
   - `level`: 日志级别 (debug, info, warn, error)
+  - `file`: 日志文件路径
   - `format`: 日志格式 (json, text)
   - `qq`: QQ 渠道专用日志设置
-
-- **builtin_tools**: 内置工具设置
-  - `shell`: Shell 工具配置
-    - `enable`: 启用 shell 工具
-    - `forbidden_commands`: 禁止命令列表
-    - `timeout`: 命令执行超时
-
-- **heart_beat**: 定期心跳任务
-  - `enable`: 启用心跳
-  - `interval`: 心跳间隔（例如 "60s", "5m", "1h"）
-  - `heart_beat_file`: 包含心跳任务的文件
-
-- **beepbot_data_dir**: BeepBot 公共数据目录，用于存储全局技能、共享数据等
 
 ## 架构
 
 ### 运行模式
 
-后端支持两种运行模式：
+后端仅支持 API 模式运行，提供 REST API 服务供前端仪表板调用。
 
-1. **API 模式** (`cmd/api`): 提供 REST API 服务，供前端仪表板调用
-2. **独立模式** (`cmd/standalone`): 独立运行，支持控制台和 QQ 渠道
+### 核心模块
+
+#### Agent（智能体）
+智能体是系统的核心，每个智能体可以：
+- 绑定一个 LLM 提供商和模型
+- 配置系统提示词、温度、最大迭代次数等参数
+- 关联多个技能
+- 绑定多个机器人渠道
+
+#### Provider（模型供应商）
+支持多种 LLM 提供商：
+- OpenAI
+- DashScope（阿里云）
+- Ollama（本地部署）
+
+#### Bot（机器人）
+支持多种消息平台：
+- QQ 机器人（腾讯官方 SDK）
+- 飞书机器人
+
+#### Cron（定时任务）
+支持基于 Cron 表达式的定时任务：
+- 关联智能体
+- 定时触发智能体执行指定消息
+
+#### Skill（技能）
+技能系统允许为智能体定义可复用的技能指令：
+- 存储在数据库中
+- 支持版本管理
+- 可关联到多个智能体
 
 ### 消息流
 
-1. **入站消息**: 渠道（QQ/控制台）接收消息并发布到 MessageBus
+1. **入站消息**: 渠道（QQ/飞书）接收消息并发布到 MessageBus
 2. **代理处理**: AgentRunner 消费消息、管理会话、协调 LLM 调用
-3. **工具执行**: 代理可在对话期间调用工具（shell、文件系统、TODO 管理）
+3. **工具执行**: 代理可在对话期间调用工具（shell、文件系统、TODO 管理、定时任务）
 4. **出站消息**: 响应发布到 MessageBus 并分发到相应渠道
 
 ### 代理循环 (ReAct 模式)
@@ -356,16 +377,15 @@ pnpm format    # 使用 Prettier 格式化
 
 ### 会话管理
 
-会话通过 `{channel}:{group_id}:{user_id}` 标识。每个会话维护：
+会话通过 `{agent_id}:{bot_id}:{channel}:{group_id}:{user_id}` 标识。每个会话维护：
 - 对话历史（滑动窗口）
 - 创建/更新时间戳
-- 可选摘要（供将来使用）
+- 可选摘要（供上下文压缩使用）
 
-会话存储在内存中，重启后历史记录将清空。
-
-会话历史采用 FIFO 策略，当达到窗口大小时：
-- 普通消息：删除最早的消息
-- 包含 tool_calls 的 assistant 消息：同时删除对应的 tool 结果消息
+会话持久化到数据库，支持：
+- 上下文窗口管理
+- Token 用量统计
+- 上下文压缩（当达到阈值时）
 
 ### 工具系统
 
@@ -387,12 +407,11 @@ type Tool interface {
 - `shell`: 执行 shell 命令（有限制）
 - `system_info`: 获取系统信息
 - `todo`: 任务管理工具（添加、列出、更新、删除、清除任务）
+- `cron`: 定时任务管理工具
 
 ### 技能系统
 
-技能系统允许为智能体定义可复用的技能指令。技能存储在两个位置：
-- **全局技能目录**: `{beepbot_data_dir}/skills/` - 所有工作空间共享
-- **工作空间技能目录**: `{working_dir}/skills/` - 当前工作空间专用
+技能系统允许为智能体定义可复用的技能指令。技能存储在数据库中，通过文件系统管理：
 
 每个技能是一个包含 `SKILL.md` 文件的目录，格式如下：
 ```markdown
@@ -406,7 +425,8 @@ type Tool interface {
 
 渠道实现不同消息平台的 `Channel` 接口：
 - `qq`: 通过 WebSocket 的 QQ 机器人（腾讯官方 SDK）
-- `system`: 用于心跳和自动化的内部系统渠道
+- `feishu`: 飞书机器人（WebSocket 长连接）
+- `system`: 用于定时任务的内部系统渠道
 
 ### 前端架构
 
@@ -431,13 +451,15 @@ type Tool interface {
 │  🤖 智能体  │  │                                             │   │
 │  🔌 供应商  │  │              路由页面内容                    │   │
 │  💬 机器人  │  │              (卡片列表展示)                  │   │
+│  ⏰ 定时任务│  │                                             │   │
+│  📚 技能   │  │                                             │   │
 │  ⚙️ 设置   │  │                                             │   │
 │            │  └─────────────────────────────────────────────┘   │
 └────────────┴────────────────────────────────────────────────────┘
 ```
 
 - **Header**: 头部栏，包含折叠按钮、Logo、深浅色主题切换开关
-- **Sidebar**: 侧边导航栏，支持展开/折叠，包含四个导航项
+- **Sidebar**: 侧边导航栏，支持展开/折叠，包含六个导航项
 - **Main Content**: 主内容区，展示路由页面内容
 
 #### 主题系统
@@ -453,8 +475,14 @@ type Tool interface {
 | 路由 | 页面 | 说明 |
 |------|------|------|
 | `/agents` | AgentList.vue | 智能体列表，卡片风格展示 |
+| `/agents/:id/edit` | AgentConfig.vue | 智能体配置页 |
+| `/agents/:id/logs` | AgentLogs.vue | 智能体日志页 |
+| `/agents/:id/monitor` | AgentMonitor.vue | 智能体监控页 |
 | `/providers` | ProviderList.vue | 模型供应商列表，卡片风格展示 |
 | `/bots` | BotList.vue | IM机器人列表，卡片风格展示 |
+| `/crons` | CronList.vue | 定时任务列表页 |
+| `/skills` | SkillList.vue | 技能列表页 |
+| `/skills/:id` | SkillDetail.vue | 技能详情页 |
 | `/settings` | Settings.vue | 全局设置，表单风格 |
 
 ## 安全注意事项
@@ -470,10 +498,19 @@ type Tool interface {
 - 路径遍历保护解析和验证路径
 - 访问工作目录外路径的尝试被拒绝
 
+### API 密钥安全
+- Provider 的 API 密钥加密存储在数据库中
+- API 响应中返回脱敏后的密钥
+- 加密密钥可配置或自动生成
+
 ### QQ 机器人安全
 - 使用 OAuth2 基于令牌的认证
 - 令牌自动刷新
-- WebSocket 连接安全管理的
+- WebSocket 连接安全管理
+
+### 飞书机器人安全
+- 支持加密密钥验证消息
+- 支持用户和群组白名单
 
 ## 开发指南
 
@@ -491,19 +528,20 @@ type Tool interface {
 ### 添加新工具
 1. 在 `beepbot/internal/tool/` 中创建新文件
 2. 实现 `Tool` 接口
-3. 在 `agent.NewAgentRun()` 中注册
+3. 在 `agent.NewApiRunner()` 中注册
 4. 如需要添加配置
 
 ### 添加新渠道
 1. 在 `beepbot/internal/channel/` 中创建新文件
 2. 实现 `Channel` 接口
-3. 在 `ChannelManager.InitChannels()` 中注册
-4. 在 `beepbot/internal/config/` 中添加配置结构
+3. 在 `ChannelFactoryRegistry` 中注册工厂函数
+4. 在 `beepbot/internal/types/bot.go` 中添加平台类型
 
 ### 添加新 LLM 提供商
 1. 在 `beepbot/internal/provider/` 中创建提供商实现
 2. 实现 `types.LLMProvider` 接口
-3. 在 `provider.CreateLLMProvider()` 中注册
+3. 在 `provider.CreateLLMProviderFromApi()` 中注册
+4. 在 `beepbot/internal/types/provider.go` 中添加提供商类型
 
 ## 测试
 
@@ -521,14 +559,12 @@ type Tool interface {
 ```bash
 cd beepbot
 go build -ldflags "-s -w" -o beepbot-api.exe ./cmd/api
-go build -ldflags "-s -w" -o beepbot-standalone.exe ./cmd/standalone
 ```
 
 #### Linux
 ```bash
 cd beepbot
 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o beepbot-api ./cmd/api
-GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o beepbot-standalone ./cmd/standalone
 ```
 
 ### 前端
@@ -545,19 +581,23 @@ pnpm build
 
 ## 重要说明
 
-1. **工作目录**: 配置中的 `working_dir` 隔离文件操作。确保它存在并具有适当的权限。
+1. **工作目录**: 每个智能体有自己的 `working_dir` 隔离文件操作。确保它存在并具有适当的权限。
 
 2. **数据目录**: `beepbot_data_dir` 用于存储全局技能、共享数据等公共资源。文件工具可以访问此目录。
 
-3. **QQ 机器人**: 需要腾讯 QQ 机器人平台的有效 AppID 和 AppSecret。消息将 `.` 替换为 `·` 以避免 URL 检测问题。
+3. **QQ 机器人**: 需要腾讯 QQ 机器人平台的有效 AppID 和 AppSecret。
 
-4. **心跳**: 心跳系统从 markdown 文件读取任务，并按配置间隔触发代理处理。适用于自动化和定时任务。
+4. **飞书机器人**: 需要飞书开放平台的有效 AppID 和 AppSecret。
 
 5. **API 密钥**: 切勿将 API 密钥提交到版本控制。在生产环境中使用环境变量或安全密钥管理。
 
 6. **TODO 管理**: TODO 工具将任务列表存储在工作目录的 `TODO.md` 文件中，支持添加、列出、更新、删除和清除操作。
 
 7. **前后端分离**: 前端 dashboard 是独立的 Vue 项目，需要单独安装依赖和构建。
+
+8. **数据库**: 使用 PostgreSQL 数据库，确保数据库已创建并可访问。
+
+9. **定时任务**: 定时任务通过 Cron 表达式配置，由后端调度器自动触发。
 
 ## 许可证
 

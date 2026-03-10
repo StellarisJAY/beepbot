@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/StellarisJAY/beepbot/internal/config"
-
 	"github.com/tencent-connect/botgo"
 	"github.com/tencent-connect/botgo/dto"
 	"github.com/tencent-connect/botgo/event"
@@ -28,15 +26,6 @@ type QQBotChannel struct {
 
 	appID     string
 	appSecret string
-}
-
-// NewQQBotChannelFromConfig 在standalone模式下从配置文件创建Channel
-func NewQQBotChannelFromConfig(config config.StandaloneConfig, bus *MessageBus) Channel {
-	return &QQBotChannel{
-		BaseChannel: NewBaseChannel("qq/standalone", bus),
-		appID:       config.ChannelConfig.QQ.AppID,
-		appSecret:   config.ChannelConfig.QQ.AppSecret,
-	}
 }
 
 // NewQQBotChannel 在api模式下通过channel的配置创建, id为botID，也就是channelID

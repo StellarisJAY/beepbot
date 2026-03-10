@@ -32,13 +32,12 @@ const compressionPrompt = `请将以下对话历史压缩成简洁的摘要，�
 摘要应该简洁明了，便于后续对话参考。`
 
 type AgentRunner struct {
-	model          types.LLMProvider
-	bus            *channel.MessageBus
-	sessionManager *session.StandaloneSessionManager // 仅 Standalone 模式使用
-	tools          *tool.ToolRegistry
-	skillManager   *skill.Manager
-	modelID        string
-	agentID        string // 智能体ID，用于工具执行时的身份识别
+	model        types.LLMProvider
+	bus          *channel.MessageBus
+	tools        *tool.ToolRegistry
+	skillManager *skill.Manager
+	modelID      string
+	agentID      string // 智能体ID，用于工具执行时的身份识别
 
 	maxIterations int
 	systemPrompt  string
@@ -56,35 +55,6 @@ type ChatCompletionHook func(response types.LLMResponse)
 type ContextCompressionHook func()
 type ToolUsageHook func(tool types.ToolCall, result string, err error, duration time.Duration)
 type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
-
-// StandaloneMessageLoop standalone模式下消息消费循环
-func (a *AgentRunner) StandaloneMessageLoop(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			// 接收消息总线消息
-			message, ok := a.bus.ConsumeInbound(ctx)
-			if !ok {
-				continue
-			}
-			var sessionKey string
-			if message.GroupID != "" {
-				slog.Info("receive group message", "channel", message.Channel, "group", message.GroupID, "userID", message.UserID, "content", message.Content)
-			} else {
-				slog.Info("receive private message", "channel", message.Channel, "user", message.UserID, "content", message.Content)
-			}
-			sessionKey = session.GetSessionKeyForStandalone(message.Channel, message.GroupID, message.UserID)
-			session := a.sessionManager.GetOrCreateSession(sessionKey)
-			if a.onMessageRecv != nil {
-				a.onMessageRecv(message)
-			}
-			// 创建智能体循环gorountine处理消息
-			go a.AgentLoop(ctx, session, message)
-		}
-	}
-}
 
 func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage) {
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
