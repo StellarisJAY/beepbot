@@ -12,12 +12,14 @@ import (
 // AgentService 智能体服务
 type AgentService struct {
 	repo            repository.AgentRepository
+	skillRepo       repository.SkillRepository
 	providerService *ProviderService
 }
 
-func NewAgentService(repo repository.AgentRepository, providerService *ProviderService) *AgentService {
+func NewAgentService(repo repository.AgentRepository, skillRepo repository.SkillRepository, providerService *ProviderService) *AgentService {
 	return &AgentService{
 		repo:            repo,
+		skillRepo:       skillRepo,
 		providerService: providerService,
 	}
 }
@@ -69,6 +71,10 @@ type CreateAgentRequest struct {
 	WindowSize        int     `json:"window_size"`
 	CompressionRatio  float64 `json:"compression_ratio"`
 	ContextMaxTokens  int64   `json:"context_max_tokens"`
+	// UseAllSkills 是否使用所有技能（默认 true）
+	UseAllSkills bool `json:"use_all_skills"`
+	// SkillIDs 关联的技能ID列表
+	SkillIDs []string `json:"skill_ids"`
 }
 
 // GetAgentDefaults 获取智能体默认配置
@@ -121,6 +127,17 @@ type UpdateAgentRequest struct {
 	CompressionRatio  float64           `json:"compression_ratio"`
 	ContextMaxTokens  int64             `json:"context_max_tokens"`
 	Status            types.AgentStatus `json:"status"`
+	// UseAllSkills 是否使用所有技能
+	UseAllSkills *bool `json:"use_all_skills,omitempty"`
+	// SkillIDs 关联的技能ID列表（仅当 use_all_skills 为 false 时有效）
+	SkillIDs []string `json:"skill_ids,omitempty"`
+}
+
+// SkillBrief 技能简要信息
+type SkillBrief struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // AgentResponse 智能体响应
@@ -141,8 +158,12 @@ type AgentResponse struct {
 	CompressionRatio  float64           `json:"compression_ratio"`
 	ContextMaxTokens  int64             `json:"context_max_tokens"`
 	Status            types.AgentStatus `json:"status"`
-	CreatedAt         time.Time         `json:"created_at"`
-	UpdatedAt         time.Time         `json:"updated_at"`
+	// UseAllSkills 是否使用所有技能
+	UseAllSkills bool `json:"use_all_skills"`
+	// Skills 关联的技能列表（简要信息）
+	Skills    []SkillBrief `json:"skills,omitempty"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }
 
 // CreateAgent 创建智能体
@@ -221,12 +242,21 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		CompressionRatio:  compressionRatio,
 		ContextMaxTokens:  contextMaxTokens,
 		Status:            types.AgentStatusInactive, // 默认禁用，配置完成后启用
+		UseAllSkills:      req.UseAllSkills,          // 默认为 false，前端应传 true
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}
 
 	if err := s.repo.Create(agent); err != nil {
 		return nil, err
+	}
+
+	// 如果不使用所有技能且指定了技能列表，创建技能关联
+	if !req.UseAllSkills && len(req.SkillIDs) > 0 {
+		if err := s.repo.SetAgentSkills(agentID, req.SkillIDs); err != nil {
+			// 记录错误但不回滚智能体创建
+			// 可以考虑添加日志
+		}
 	}
 
 	return agent, nil
@@ -304,10 +334,22 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 		agent.Status = req.Status
 	}
 
+	// 更新 UseAllSkills 字段
+	if req.UseAllSkills != nil {
+		agent.UseAllSkills = *req.UseAllSkills
+	}
+
 	agent.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(agent); err != nil {
 		return nil, err
+	}
+
+	// 更新技能关联（仅当 UseAllSkills 为 false 且提供了 SkillIDs 时）
+	if req.UseAllSkills != nil && !*req.UseAllSkills && req.SkillIDs != nil {
+		if err := s.repo.SetAgentSkills(id, req.SkillIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	return agent, nil
@@ -315,6 +357,11 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 
 // DeleteAgent 删除智能体
 func (s *AgentService) DeleteAgent(id string) error {
+	// 先删除技能关联
+	if err := s.repo.DeleteAgentSkills(id); err != nil {
+		return err
+	}
+	// 再删除智能体
 	return s.repo.Delete(id)
 }
 
@@ -419,6 +466,7 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 		CompressionRatio:  agent.CompressionRatio,
 		ContextMaxTokens:  agent.ContextMaxTokens,
 		Status:            agent.Status,
+		UseAllSkills:      agent.UseAllSkills,
 		CreatedAt:         agent.CreatedAt,
 		UpdatedAt:         agent.UpdatedAt,
 	}
@@ -435,5 +483,90 @@ func (s *AgentService) toResponseWithRelations(agent *types.Agent) *AgentRespons
 		}
 	}
 
+	// 如果不使用所有技能，查询关联的技能列表
+	if !agent.UseAllSkills && s.skillRepo != nil {
+		skills, err := s.getSkillBriefs(agent.ID)
+		if err == nil {
+			response.Skills = skills
+		}
+	}
+
 	return response
+}
+
+// getSkillBriefs 获取智能体关联的技能简要信息
+func (s *AgentService) getSkillBriefs(agentID string) ([]SkillBrief, error) {
+	skillIDs, err := s.repo.GetAgentSkills(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(skillIDs) == 0 {
+		return []SkillBrief{}, nil
+	}
+
+	skills := make([]SkillBrief, 0, len(skillIDs))
+	for _, id := range skillIDs {
+		if skill, err := s.skillRepo.GetByID(id); err == nil {
+			skills = append(skills, SkillBrief{
+				ID:          skill.ID,
+				Name:        skill.Name,
+				Description: skill.Description,
+			})
+		}
+	}
+
+	return skills, nil
+}
+
+// GetAgentSkills 获取智能体关联的技能列表
+func (s *AgentService) GetAgentSkills(agentID string) ([]SkillBrief, error) {
+	skillIDs, err := s.repo.GetAgentSkills(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有关联技能，返回空列表
+	if len(skillIDs) == 0 {
+		return []SkillBrief{}, nil
+	}
+
+	// 如果有 SkillRepository，获取技能详情
+	if s.skillRepo != nil {
+		return s.getSkillBriefs(agentID)
+	}
+
+	// 否则只返回 ID
+	skills := make([]SkillBrief, len(skillIDs))
+	for i, id := range skillIDs {
+		skills[i] = SkillBrief{ID: id}
+	}
+
+	return skills, nil
+}
+
+// UpdateAgentSkills 更新智能体技能配置
+func (s *AgentService) UpdateAgentSkills(agentID string, useAllSkills bool, skillIDs []string) error {
+	// 更新 UseAllSkills 字段
+	agent, err := s.repo.GetByID(agentID)
+	if err != nil {
+		return err
+	}
+
+	agent.UseAllSkills = useAllSkills
+	agent.UpdatedAt = time.Now()
+
+	if err := s.repo.Update(agent); err != nil {
+		return err
+	}
+
+	// 更新技能关联
+	if !useAllSkills && len(skillIDs) > 0 {
+		return s.repo.SetAgentSkills(agentID, skillIDs)
+	} else if !useAllSkills {
+		// 如果不使用所有技能且没有指定技能，清空关联
+		return s.repo.DeleteAgentSkills(agentID)
+	}
+
+	return nil
 }

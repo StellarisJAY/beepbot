@@ -19,6 +19,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/logger"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/service"
+	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
 )
 
@@ -76,13 +77,21 @@ func main() {
 	botRepo := repository.NewBotRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 	cronRepo := repository.NewCronRepository(db)
+	skillRepo := repository.NewSkillRepository(db)
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
-	agentService := service.NewAgentService(agentRepo, providerService)
+	agentService := service.NewAgentService(agentRepo, skillRepo, providerService)
 	botService := service.NewBotService(botRepo, agentService)
 	sessionService := service.NewSessionService(sessionRepo, botRepo)
 	cronService := service.NewCronService(cronRepo, agentService)
+	skillService := service.NewSkillService(skillRepo, agentRepo, cfg.DataDir)
+
+	// 确保技能目录存在
+	skillsDir := filepath.Join(cfg.DataDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		slog.Warn("failed to create skills directory", "error", err)
+	}
 
 	// 创建消息总线
 	messageBus := channel.NewMessageBus()
@@ -94,7 +103,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService)
 
 	// 确定 API 端口
 	port := cfg.Port
@@ -114,25 +123,7 @@ func main() {
 		channelManager.DispatchOutbound(ctx)
 	}()
 
-	// 启动 AgentManager 消息循环
-	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor)
-	go func() {
-		agentManager.MessageLoop(ctx)
-	}()
-
-	// 加载所有 active 状态的 Bot 并启动 Channel
-	activeBots, err := botRepo.GetByStatus(types.BotStatusActive)
-	if err != nil {
-		slog.Warn("failed to load active bots", "error", err)
-	} else {
-		slog.Info("loading active bots", "count", len(activeBots))
-		errs := channelManager.StartAllActiveChannels(ctx, activeBots)
-		for _, e := range errs {
-			slog.Error("failed to start channel", "error", e)
-		}
-	}
-
-	// 初始化并启动定时任务调度器
+	// 初始化并启动定时任务调度器（需要在 AgentManager 之前初始化）
 	var cronScheduler *cronscheduler.Scheduler
 	cronScheduler = cronscheduler.NewScheduler(cronRepo, messageBus)
 	if err := cronScheduler.Start(ctx); err != nil {
@@ -148,6 +139,32 @@ func main() {
 			slog.Info("Cron scheduler stopped")
 		}
 	}()
+
+	// 创建 CronToolDeps 用于定时任务工具
+	cronDeps := &tool.CronToolDeps{
+		CronRepo:   cronRepo,
+		Scheduler:  cronScheduler,
+		Validator:  tool.DefaultCronValidator(),
+		AgentCheck: func(agentID string) bool { return true }, // 简单验证，实际由工具内部处理
+	}
+
+	// 启动 AgentManager 消息循环
+	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor, cronDeps)
+	go func() {
+		agentManager.MessageLoop(ctx)
+	}()
+
+	// 加载所有 active 状态的 Bot 并启动 Channel
+	activeBots, err := botRepo.GetByStatus(types.BotStatusActive)
+	if err != nil {
+		slog.Warn("failed to load active bots", "error", err)
+	} else {
+		slog.Info("loading active bots", "count", len(activeBots))
+		errs := channelManager.StartAllActiveChannels(ctx, activeBots)
+		for _, e := range errs {
+			slog.Error("failed to start channel", "error", e)
+		}
+	}
 
 	// 启动 API 服务器
 	go func() {

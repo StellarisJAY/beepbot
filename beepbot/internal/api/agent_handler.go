@@ -184,3 +184,50 @@ func (h *AgentHandler) ValidateAgent(c *gin.Context) {
 	result := h.service.ValidateAgentConfig(agent)
 	Success(c, result)
 }
+
+// GetAgentSkills 获取智能体关联的技能列表
+// GET /api/v1/agents/:id/skills
+func (h *AgentHandler) GetAgentSkills(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		BadRequest(c, "agent id is required")
+		return
+	}
+
+	skills, err := h.service.GetAgentSkills(id)
+	if err != nil {
+		Error(c, 500, "failed to get agent skills: "+err.Error())
+		return
+	}
+
+	Success(c, skills)
+}
+
+// UpdateAgentSkillsRequest 更新智能体技能配置请求
+type UpdateAgentSkillsRequest struct {
+	UseAllSkills bool     `json:"use_all_skills"`
+	SkillIDs     []string `json:"skill_ids"`
+}
+
+// UpdateAgentSkills 更新智能体技能配置
+// PUT /api/v1/agents/:id/skills
+func (h *AgentHandler) UpdateAgentSkills(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		BadRequest(c, "agent id is required")
+		return
+	}
+
+	var req UpdateAgentSkillsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.service.UpdateAgentSkills(id, req.UseAllSkills, req.SkillIDs); err != nil {
+		Error(c, 500, "failed to update agent skills: "+err.Error())
+		return
+	}
+
+	Success(c, nil)
+}

@@ -5,6 +5,8 @@ import type {
   CreateAgentRequest,
   UpdateAgentRequest,
   ValidationResult,
+  SkillBrief,
+  UpdateAgentSkillsRequest,
 } from '@/types/agent'
 
 /**
@@ -65,6 +67,20 @@ export const agentApi = {
    */
   validate(id: string): Promise<ApiResponse<ValidationResult>> {
     return http.post<ValidationResult>(`/agents/${id}/validate`)
+  },
+
+  /**
+   * 获取智能体关联的技能列表
+   */
+  getSkills(id: string): Promise<ApiResponse<SkillBrief[]>> {
+    return http.get<SkillBrief[]>(`/agents/${id}/skills`)
+  },
+
+  /**
+   * 更新智能体技能配置
+   */
+  updateSkills(id: string, data: UpdateAgentSkillsRequest): Promise<ApiResponse<void>> {
+    return http.put<void>(`/agents/${id}/skills`, data)
   },
 }
 

@@ -38,6 +38,7 @@ type AgentRunner struct {
 	tools          *tool.ToolRegistry
 	skillManager   *skill.Manager
 	modelID        string
+	agentID        string // 智能体ID，用于工具执行时的身份识别
 
 	maxIterations int
 	systemPrompt  string
@@ -231,7 +232,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 				slog.Error("parse function call arguments error", "tool", tc.Name, "args", tc.Function.Arguments)
 				err = errors.New("invalid arguments")
 			} else {
-				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID)
+				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID, a.agentID)
 			}
 
 			if a.onToolUsage != nil {

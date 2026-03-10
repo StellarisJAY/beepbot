@@ -29,8 +29,12 @@ type Agent struct {
 	CompressionRatio  float64     `json:"compression_ratio" gorm:"column:compression_ratio;type:real;default:0.7"`
 	ContextMaxTokens  int64       `json:"context_max_tokens" gorm:"column:context_max_tokens;type:integer;default:4096"`
 	Status            AgentStatus `json:"status" gorm:"column:status;type:varchar(16);default:active;index"`
-	CreatedAt         time.Time   `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
-	UpdatedAt         time.Time   `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
+	// UseAllSkills 是否使用系统所有技能
+	// true: 使用所有技能（默认）
+	// false: 仅使用关联表中的技能
+	UseAllSkills bool      `json:"use_all_skills" gorm:"column:use_all_skills;type:boolean;default:true"`
+	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt    time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
 // TableName 指定表名

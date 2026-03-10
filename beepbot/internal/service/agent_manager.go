@@ -11,6 +11,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/repository"
+	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
 	"gorm.io/gorm"
 )
@@ -22,6 +23,7 @@ type AgentManager struct {
 	sessionRepo  repository.SessionRepository
 	bus          *channel.MessageBus
 	encryptor    *crypto.Encryptor
+	cronDeps     *tool.CronToolDeps // 定时任务工具依赖
 
 	config config.APIConfig
 
@@ -36,7 +38,8 @@ func NewAgentManager(
 	botRepo repository.BotRepository,
 	providerRepo repository.ProviderRepository,
 	messageBus *channel.MessageBus,
-	encryptor *crypto.Encryptor) *AgentManager {
+	encryptor *crypto.Encryptor,
+	cronDeps *tool.CronToolDeps) *AgentManager {
 	return &AgentManager{
 		config:       config,
 		agentRepo:    agentRepo,
@@ -45,6 +48,7 @@ func NewAgentManager(
 		sessionRepo:  repository.NewSessionRepository(db),
 		bus:          messageBus,
 		encryptor:    encryptor,
+		cronDeps:     cronDeps,
 		wg:           &sync.WaitGroup{},
 	}
 }
@@ -139,7 +143,7 @@ func (a *AgentManager) startAgentLoop(ctx context.Context, agentDef *types.Agent
 		return
 	}
 	providerDef.APIKey, _ = a.encryptor.Decrypt(providerDef.APIKey)
-	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo)
+	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps)
 	if err != nil {
 		slog.Error("create agent runner error", "err", err)
 		return

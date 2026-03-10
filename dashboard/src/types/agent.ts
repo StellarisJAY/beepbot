@@ -33,6 +33,15 @@ export interface ProviderBrief {
 }
 
 /**
+ * 技能简要信息
+ */
+export interface SkillBrief {
+  id: string
+  name: string
+  description: string
+}
+
+/**
  * 智能体配置
  */
 export interface Agent {
@@ -52,6 +61,10 @@ export interface Agent {
   compression_ratio: number
   context_max_tokens: number
   status: AgentStatus
+  // 是否使用所有技能
+  use_all_skills: boolean
+  // 关联的技能列表
+  skills?: SkillBrief[]
   created_at: string
   updated_at: string
 }
@@ -96,6 +109,9 @@ export interface CreateAgentRequest {
   window_size?: number
   compression_ratio?: number
   context_max_tokens?: number
+  // 技能配置
+  use_all_skills?: boolean
+  skill_ids?: string[]
 }
 
 /**
@@ -116,4 +132,15 @@ export interface UpdateAgentRequest {
   compression_ratio?: number
   context_max_tokens?: number
   status?: AgentStatus
+  // 技能配置
+  use_all_skills?: boolean
+  skill_ids?: string[]
+}
+
+/**
+ * 更新智能体技能配置请求
+ */
+export interface UpdateAgentSkillsRequest {
+  use_all_skills: boolean
+  skill_ids?: string[]
 }

@@ -34,11 +34,11 @@ func (r *ToolRegistry) Get(name string) (Tool, bool) {
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, name string, params map[string]any) (string, error) {
-	return r.ExecuteWithContext(ctx, name, params, "", "")
+	return r.ExecuteWithContext(ctx, name, params, "", "", "")
 }
 
-// ExecuteWithContext 带有上下文信息的工具执行，上下文中包含发送消息的用户信息
-func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, params map[string]any, channel string, userID string) (string, error) {
+// ExecuteWithContext 带有上下文信息的工具执行，上下文中包含发送消息的用户信息和智能体ID
+func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, params map[string]any, channel string, userID string, agentID string) (string, error) {
 	r.mutex.RLock()
 	tool, ok := r.tools[name]
 	r.mutex.RUnlock()
@@ -47,9 +47,10 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, para
 		return "", errors.New("tool not found")
 	}
 	start := time.Now()
-	// 将channel和用户信息加入到工具上下文
+	// 将channel、用户信息和智能体ID加入到工具上下文
 	ctx = context.WithValue(ctx, "channel", channel)
 	ctx = context.WithValue(ctx, "userID", userID)
+	ctx = context.WithValue(ctx, AgentIDKey, agentID)
 	result, err := tool.Execute(ctx, params)
 	duration := time.Since(start)
 	if err != nil {

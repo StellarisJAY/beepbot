@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, inject, watch, type Ref, type ComputedRef } from 'vue'
+import { ref, onMounted, inject, watch, computed, type Ref, type ComputedRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { agentApi } from '@/api/agent'
 import { providerApi } from '@/api/provider'
-import type { Agent, AgentDefaults, UpdateAgentRequest } from '@/types/agent'
+import { skillApi } from '@/api/skill'
+import type { Agent, AgentDefaults, UpdateAgentRequest, SkillBrief } from '@/types/agent'
 import type { Provider } from '@/types/provider'
+import type { Skill } from '@/types/skill'
 import { AgentStatus } from '@/types/agent'
 
 // 从父组件注入的数据
@@ -15,10 +17,28 @@ const fetchAgent = inject<() => Promise<void>>('fetchAgent')
 // 数据
 const defaults = ref<AgentDefaults | null>(null)
 const providers = ref<Provider[]>([])
+const allSkills = ref<Skill[]>([])
+const skillsLoading = ref(false)
 const saving = ref(false)
 
 // 表单数据
 const form = ref<UpdateAgentRequest>({})
+
+// 技能选项（用于选择器）
+const skillOptions = computed(() => {
+  return allSkills.value
+    .filter((s) => s.status === 'active')
+    .map((s) => ({
+      value: s.id,
+      label: s.name,
+      description: s.description,
+    }))
+})
+
+// 技能筛选
+const filterOption = (input: string, option: { label: string }) => {
+  return option.label.toLowerCase().includes(input.toLowerCase())
+}
 
 // 获取默认配置
 const fetchDefaults = async () => {
@@ -40,6 +60,19 @@ const fetchProviders = async () => {
   }
 }
 
+// 获取所有技能列表
+const fetchAllSkills = async () => {
+  skillsLoading.value = true
+  try {
+    const res = await skillApi.list(1, 1000) // 获取所有技能
+    allSkills.value = res.data
+  } catch (error) {
+    console.error('获取技能列表失败:', error)
+  } finally {
+    skillsLoading.value = false
+  }
+}
+
 // 初始化表单
 const initForm = () => {
   if (agent?.value) {
@@ -58,6 +91,8 @@ const initForm = () => {
       compression_ratio: agent.value.compression_ratio,
       context_max_tokens: agent.value.context_max_tokens,
       status: agent.value.status,
+      use_all_skills: agent.value.use_all_skills,
+      skill_ids: agent.value.skills?.map((s: SkillBrief) => s.id) || [],
     }
   }
 }
@@ -113,6 +148,7 @@ watch(
 onMounted(() => {
   fetchDefaults()
   fetchProviders()
+  fetchAllSkills()
 })
 </script>
 
@@ -206,6 +242,28 @@ onMounted(() => {
             v-model:value="form.working_dir"
             placeholder="请输入工作目录"
             :maxlength="512"
+          />
+        </a-form-item>
+
+        <!-- 技能配置 -->
+        <a-form-item label="技能配置">
+          <a-radio-group v-model:value="form.use_all_skills">
+            <a-radio :value="true">使用所有技能</a-radio>
+            <a-radio :value="false">选择特定技能</a-radio>
+          </a-radio-group>
+        </a-form-item>
+
+        <!-- 当选择"选择特定技能"时显示技能选择器 -->
+        <a-form-item v-if="!form.use_all_skills" label="可用技能">
+          <a-select
+            v-model:value="form.skill_ids"
+            mode="multiple"
+            placeholder="请选择技能"
+            :options="skillOptions"
+            :loading="skillsLoading"
+            show-search
+            :filter-option="filterOption"
+            style="width: 100%"
           />
         </a-form-item>
       </a-form>

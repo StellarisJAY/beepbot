@@ -15,7 +15,7 @@ import (
 )
 
 // NewApiRunner 创建API模式的智能体运行器
-func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *channel.MessageBus, config config.APIConfig) (*AgentRunner, error) {
+func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *channel.MessageBus, config config.APIConfig, cronDeps *tool.CronToolDeps) (*AgentRunner, error) {
 	// 创建聊天模型接口
 	llmProvider, err := provider.CreateLLMProviderFromApi(providerDef, agentDef.Model)
 	if err != nil {
@@ -35,6 +35,10 @@ func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *chann
 	// 操作系统信息工具
 	toolRegistry.Register(tool.NewReadSystemInfoTool())
 	toolRegistry.Register(tool.NewShellToolFromApi(workingDir))
+	// 定时任务工具（仅在API模式下注册）
+	if cronDeps != nil {
+		toolRegistry.Register(tool.NewCronTool(cronDeps))
+	}
 
 	// 创建技能管理器
 	skillManager := skill.NewManager(config.DataDir, workingDir)
@@ -45,6 +49,7 @@ func NewApiRunner(agentDef *types.Agent, providerDef *types.Provider, bus *chann
 		tools:         toolRegistry,
 		skillManager:  skillManager,
 		modelID:       modelID,
+		agentID:       agentDef.ID,
 		systemPrompt:  agentDef.SystemPrompt,
 		maxIterations: agentDef.MaxIterations,
 		workingDir:    agentDef.WorkingDir,
@@ -69,8 +74,9 @@ func NewApiAgentRunner(
 	bus *channel.MessageBus,
 	config config.APIConfig,
 	sessionRepo repository.SessionRepository,
+	cronDeps *tool.CronToolDeps,
 ) (*ApiAgentRunner, error) {
-	runner, err := NewApiRunner(agentDef, providerDef, bus, config)
+	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps)
 	if err != nil {
 		return nil, err
 	}

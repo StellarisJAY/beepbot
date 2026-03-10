@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/StellarisJAY/beepbot/internal/types"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -20,6 +23,18 @@ type AgentRepository interface {
 
 	// GetWithRelations 获取智能体及其关联数据
 	GetWithRelations(id string) (*types.Agent, error)
+
+	// GetAgentSkills 获取智能体关联的技能ID列表
+	GetAgentSkills(agentID string) ([]string, error)
+
+	// SetAgentSkills 设置智能体关联的技能（替换现有）
+	SetAgentSkills(agentID string, skillIDs []string) error
+
+	// DeleteAgentSkills 删除智能体的所有技能关联
+	DeleteAgentSkills(agentID string) error
+
+	// DeleteSkillFromAllAgents 从所有智能体中删除指定技能的关联
+	DeleteSkillFromAllAgents(skillID string) error
 }
 
 type agentRepository struct {
@@ -60,4 +75,56 @@ func (r *agentRepository) GetWithRelations(id string) (*types.Agent, error) {
 		return nil, err
 	}
 	return &agent, nil
+}
+
+// GetAgentSkills 获取智能体关联的技能ID列表
+func (r *agentRepository) GetAgentSkills(agentID string) ([]string, error) {
+	var agentSkills []types.AgentSkill
+	err := r.db.Where("agent_id = ?", agentID).Find(&agentSkills).Error
+	if err != nil {
+		return nil, err
+	}
+	skillIDs := make([]string, len(agentSkills))
+	for i, as := range agentSkills {
+		skillIDs[i] = as.SkillID
+	}
+	return skillIDs, nil
+}
+
+// SetAgentSkills 设置智能体关联的技能（替换现有）
+func (r *agentRepository) SetAgentSkills(agentID string, skillIDs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 删除现有关联
+		if err := tx.Where("agent_id = ?", agentID).Delete(&types.AgentSkill{}).Error; err != nil {
+			return err
+		}
+
+		// 创建新关联
+		if len(skillIDs) > 0 {
+			now := time.Now()
+			agentSkills := make([]types.AgentSkill, len(skillIDs))
+			for i, skillID := range skillIDs {
+				agentSkills[i] = types.AgentSkill{
+					ID:        uuid.NewString(),
+					AgentID:   agentID,
+					SkillID:   skillID,
+					CreatedAt: now,
+				}
+			}
+			if err := tx.Create(&agentSkills).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// DeleteAgentSkills 删除智能体的所有技能关联
+func (r *agentRepository) DeleteAgentSkills(agentID string) error {
+	return r.db.Where("agent_id = ?", agentID).Delete(&types.AgentSkill{}).Error
+}
+
+// DeleteSkillFromAllAgents 从所有智能体中删除指定技能的关联
+func (r *agentRepository) DeleteSkillFromAllAgents(skillID string) error {
+	return r.db.Where("skill_id = ?", skillID).Delete(&types.AgentSkill{}).Error
 }

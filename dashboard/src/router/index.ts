@@ -68,6 +68,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '定时任务' },
   },
   {
+    path: '/skills',
+    name: 'Skills',
+    component: () => import('@/views/skills/SkillList.vue'),
+    meta: { title: '技能管理' },
+  },
+  {
+    path: '/skills/:id',
+    name: 'SkillDetail',
+    component: () => import('@/views/skills/SkillDetail.vue'),
+    meta: { title: '技能详情' },
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/settings/Settings.vue'),
