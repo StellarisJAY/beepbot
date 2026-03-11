@@ -30,7 +30,6 @@ type AgentDefaults struct {
 	Temperature         float32 `json:"temperature"`
 	MaxIterations       int     `json:"max_iterations"`
 	MaxOutputTokens     int64   `json:"max_output_tokens"`
-	WindowSize          int     `json:"window_size"`
 	CompressionRatio    float64 `json:"compression_ratio"`
 	CompressionKeepSize int     `json:"compression_keep_size"`
 	ContextMaxTokens    int64   `json:"context_max_tokens"`
@@ -48,10 +47,9 @@ const (
 	DefaultTemperature         = 0.7
 	DefaultMaxIterations       = 50
 	DefaultMaxOutputTokens     = 4096
-	DefaultWindowSize          = 20
 	DefaultCompressionRatio    = 0.7
 	DefaultCompressionKeepSize = 5
-	DefaultContextMaxTokens    = 4096
+	DefaultContextMaxTokens    = 40960
 )
 
 // CreateAgentRequest 创建智能体请求
@@ -66,7 +64,6 @@ type CreateAgentRequest struct {
 	Temperature         float32 `json:"temperature"`
 	MaxIterations       int     `json:"max_iterations"`
 	MaxOutputTokens     int64   `json:"max_output_tokens"`
-	WindowSize          int     `json:"window_size"`
 	CompressionRatio    float64 `json:"compression_ratio"`
 	CompressionKeepSize int     `json:"compression_keep_size"`
 	ContextMaxTokens    int64   `json:"context_max_tokens"`
@@ -83,7 +80,6 @@ func (s *AgentService) GetAgentDefaults() *AgentDefaults {
 		Temperature:         DefaultTemperature,
 		MaxIterations:       DefaultMaxIterations,
 		MaxOutputTokens:     DefaultMaxOutputTokens,
-		WindowSize:          DefaultWindowSize,
 		CompressionRatio:    DefaultCompressionRatio,
 		CompressionKeepSize: DefaultCompressionKeepSize,
 		ContextMaxTokens:    DefaultContextMaxTokens,
@@ -121,7 +117,6 @@ type UpdateAgentRequest struct {
 	MaxIterations       int               `json:"max_iterations"`
 	MaxOutputTokens     int64             `json:"max_output_tokens"`
 	WorkingDir          string            `json:"working_dir"`
-	WindowSize          int               `json:"window_size"`
 	CompressionRatio    float64           `json:"compression_ratio"`
 	CompressionKeepSize int               `json:"compression_keep_size"`
 	ContextMaxTokens    int64             `json:"context_max_tokens"`
@@ -152,7 +147,6 @@ type AgentResponse struct {
 	MaxIterations       int               `json:"max_iterations"`
 	MaxOutputTokens     int64             `json:"max_output_tokens"`
 	WorkingDir          string            `json:"working_dir"`
-	WindowSize          int               `json:"window_size"`
 	CompressionRatio    float64           `json:"compression_ratio"`
 	CompressionKeepSize int               `json:"compression_keep_size"`
 	ContextMaxTokens    int64             `json:"context_max_tokens"`
@@ -208,10 +202,6 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 	if maxOutputTokens == 0 {
 		maxOutputTokens = defaults.MaxOutputTokens
 	}
-	windowSize := req.WindowSize
-	if windowSize == 0 {
-		windowSize = defaults.WindowSize
-	}
 	compressionRatio := req.CompressionRatio
 	if compressionRatio == 0 {
 		compressionRatio = defaults.CompressionRatio
@@ -236,7 +226,6 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		MaxIterations:       maxIterations,
 		MaxOutputTokens:     maxOutputTokens,
 		WorkingDir:          workingDir,
-		WindowSize:          windowSize,
 		CompressionRatio:    compressionRatio,
 		CompressionKeepSize: compressionKeepSize,
 		ContextMaxTokens:    contextMaxTokens,
@@ -311,10 +300,6 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 
 	if req.WorkingDir != "" {
 		agent.WorkingDir = req.WorkingDir
-	}
-
-	if req.WindowSize != 0 {
-		agent.WindowSize = req.WindowSize
 	}
 
 	if req.CompressionRatio != 0 {
@@ -460,7 +445,6 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 		MaxIterations:       agent.MaxIterations,
 		MaxOutputTokens:     agent.MaxOutputTokens,
 		WorkingDir:          agent.WorkingDir,
-		WindowSize:          agent.WindowSize,
 		CompressionRatio:    agent.CompressionRatio,
 		CompressionKeepSize: agent.CompressionKeepSize,
 		ContextMaxTokens:    agent.ContextMaxTokens,

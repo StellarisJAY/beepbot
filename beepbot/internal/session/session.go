@@ -6,9 +6,6 @@ import "github.com/StellarisJAY/beepbot/internal/types"
 const defaultCompressionRatio = 0.8
 const defaultMaxTokens = 1000000
 
-// 为了提升智能体的短期记忆力，将窗口大小设置为50
-const defaultWindowSize = 50
-
 type Session interface {
 	// AppendMessage 添加历史消息到会话
 	AppendMessage(message types.Message) bool

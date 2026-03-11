@@ -96,6 +96,8 @@ func buildOpenAICompletionsParams(messages []types.Message, model string, option
 					})
 				}
 				assistantMessage.OfAssistant.ToolCalls = toolCalls
+			} else {
+				assistantMessage.OfAssistant.ToolCalls = nil
 			}
 			assistantMessage.OfAssistant.Content.OfString = openai.Opt(msg.Content)
 			chatMessages = append(chatMessages, assistantMessage)

@@ -10,16 +10,17 @@ import (
 
 // SessionListItem 会话列表项
 type SessionListItem struct {
-	ID           string            `json:"id"`
-	Key          string            `json:"key"`
-	BotID        string            `json:"bot_id"`
-	BotName      string            `json:"bot_name"`
-	BotPlatform  types.BotPlatform `json:"bot_platform"`
-	Summary      string            `json:"summary"`
-	MessageCount int64             `json:"message_count"`
-	TotalTokens  int64             `json:"total_tokens"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
+	ID                string            `json:"id"`
+	Key               string            `json:"key"`
+	BotID             string            `json:"bot_id"`
+	BotName           string            `json:"bot_name"`
+	BotPlatform       types.BotPlatform `json:"bot_platform"`
+	Summary           string            `json:"summary"`
+	MessageCount      int64             `json:"message_count"`
+	TotalTokens       int64             `json:"total_tokens"`
+	LastContextTokens int64             `json:"last_context_tokens"` // 当前上下文 token 数量
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
 }
 
 // SessionService 会话服务
@@ -76,12 +77,13 @@ func (s *SessionService) GetSessionsByAgent(agentID string, page, pageSize int) 
 	items := make([]SessionListItem, 0, len(sessions))
 	for _, session := range sessions {
 		item := SessionListItem{
-			ID:        session.ID,
-			Key:       session.Key,
-			BotID:     session.BotID,
-			Summary:   session.Summary,
-			CreatedAt: session.CreatedAt,
-			UpdatedAt: session.UpdatedAt,
+			ID:                session.ID,
+			Key:               session.Key,
+			BotID:             session.BotID,
+			Summary:           session.Summary,
+			LastContextTokens: session.LastContextTokens,
+			CreatedAt:         session.CreatedAt,
+			UpdatedAt:         session.UpdatedAt,
 		}
 		if bot, ok := botMap[session.BotID]; ok {
 			item.BotName = bot.Name

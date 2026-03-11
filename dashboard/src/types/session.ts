@@ -8,6 +8,7 @@ export interface SessionListItem {
   summary: string
   message_count: number
   total_tokens: number
+  last_context_tokens: number // 当前上下文 token 数量
   created_at: string
   updated_at: string
 }

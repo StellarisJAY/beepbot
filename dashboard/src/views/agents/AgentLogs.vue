@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
-import { Card, Table, Tag, Empty, Button, type TableProps } from 'ant-design-vue'
-import { ReloadOutlined } from '@ant-design/icons-vue'
+import { message, Modal } from 'ant-design-vue'
+import { Card, Table, Tag, Empty, Button, InputNumber, type TableProps } from 'ant-design-vue'
+import { ReloadOutlined, CompressOutlined } from '@ant-design/icons-vue'
 import { sessionApi } from '@/api/session'
 import type { SessionListItem } from '@/types/session'
 
@@ -44,6 +44,13 @@ const columns: TableProps['columns'] = [
     key: 'message_count',
     width: 80,
     align: 'center',
+  },
+  {
+    title: '上下文Token',
+    dataIndex: 'last_context_tokens',
+    key: 'last_context_tokens',
+    width: 110,
+    align: 'right',
   },
   {
     title: 'Token用量',
@@ -174,6 +181,11 @@ onMounted(() => {
           </template>
           <template v-else-if="column.key === 'message_count'">
             {{ record.message_count ?? 0 }}
+          </template>
+          <template v-else-if="column.key === 'last_context_tokens'">
+            <span :style="{ color: record.last_context_tokens > 3000 ? '#ff4d4f' : 'inherit' }">
+              {{ formatTokenCount(record.last_context_tokens ?? 0) }}
+            </span>
           </template>
           <template v-else-if="column.key === 'total_tokens'">
             {{ formatTokenCount(record.total_tokens ?? 0) }}

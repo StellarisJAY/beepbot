@@ -24,7 +24,6 @@ type Agent struct {
 	MaxIterations       int         `json:"max_iterations" gorm:"column:max_iterations;type:integer;default:50"`
 	MaxOutputTokens     int64       `json:"max_output_tokens" gorm:"column:max_output_tokens;type:integer;default:4096"`
 	WorkingDir          string      `json:"working_dir" gorm:"column:working_dir;type:varchar(512)"` // 可为空，自动生成或编辑时配置
-	WindowSize          int         `json:"window_size" gorm:"column:window_size;type:integer;default:20"`
 	CompressionRatio    float64     `json:"compression_ratio" gorm:"column:compression_ratio;type:real;default:0.7"`
 	CompressionKeepSize int         `json:"compression_keep_size" gorm:"column:compression_keep_size;type:integer;default:5"`
 	ContextMaxTokens    int64       `json:"context_max_tokens" gorm:"column:context_max_tokens;type:integer;default:4096"`

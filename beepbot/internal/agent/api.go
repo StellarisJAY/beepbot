@@ -70,7 +70,6 @@ type ApiAgentRunner struct {
 	*AgentRunner
 	sessionRepo         repository.SessionRepository
 	agentDef            *types.Agent
-	windowSize          int
 	maxTokens           int64
 	compressionRatio    float64
 	compressionKeepSize int
@@ -93,10 +92,6 @@ func NewApiAgentRunner(
 	}
 
 	// 获取会话配置参数
-	windowSize := agentDef.WindowSize
-	if windowSize <= 0 {
-		windowSize = 20
-	}
 	maxTokens := agentDef.ContextMaxTokens
 	if maxTokens <= 0 {
 		maxTokens = 4096
@@ -114,7 +109,6 @@ func NewApiAgentRunner(
 		AgentRunner:         runner,
 		sessionRepo:         sessionRepo,
 		agentDef:            agentDef,
-		windowSize:          windowSize,
 		maxTokens:           maxTokens,
 		compressionRatio:    compressionRatio,
 		compressionKeepSize: compressionKeepSize,
@@ -144,7 +138,6 @@ func (r *ApiAgentRunner) createSession(sessionKey string, botID string) (session
 		sessionKey,
 		r.agentDef.ID,
 		botID,
-		r.windowSize,
 		r.maxTokens,
 		r.compressionRatio,
 		r.compressionKeepSize,

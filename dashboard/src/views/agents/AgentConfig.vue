@@ -86,7 +86,6 @@ const initForm = () => {
       max_iterations: agent.value.max_iterations,
       max_output_tokens: agent.value.max_output_tokens,
       working_dir: agent.value.working_dir,
-      window_size: agent.value.window_size,
       compression_ratio: agent.value.compression_ratio,
       compression_keep_size: agent.value.compression_keep_size,
       context_max_tokens: agent.value.context_max_tokens,
@@ -272,14 +271,6 @@ onMounted(() => {
     <!-- 上下文配置 -->
     <a-card title="上下文配置" size="small" class="config-card">
       <a-form :label-col="{ span: 8 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="消息窗口大小">
-          <a-input-number
-            v-model:value="form.window_size"
-            :min="1"
-            :max="1000"
-            style="width: 100%"
-          />
-        </a-form-item>
         <a-form-item label="压缩比例">
           <a-input-number
             v-model:value="form.compression_ratio"

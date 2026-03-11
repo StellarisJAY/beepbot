@@ -17,7 +17,6 @@ type ApiSession struct {
 	key       string
 	agentID   string // 智能体 ID，用于生成会话 Key
 
-	windowSize          int
 	maxTokens           int64
 	compressionRatio    float64
 	compressionKeepSize int
@@ -36,7 +35,6 @@ func NewApiSession(
 	key string,
 	agentID string,
 	botID string,
-	windowSize int,
 	maxTokens int64,
 	compressionRatio float64,
 	compressionKeepSize int,
@@ -63,7 +61,6 @@ func NewApiSession(
 		sessionID:           session.ID,
 		key:                 key,
 		agentID:             agentID,
-		windowSize:          windowSize,
 		maxTokens:           maxTokens,
 		compressionRatio:    compressionRatio,
 		compressionKeepSize: compressionKeepSize,
@@ -104,61 +101,6 @@ func (s *ApiSession) AppendMessage(message types.Message) bool {
 	}
 
 	return s.needCompress
-}
-
-// evictMessage 淘汰最早的消息（标记为窗口外）
-// 如果最早的消息是包含 tool_calls 的 assistant 消息，同时标记关联的 tool 结果消息
-func (s *ApiSession) evictMessage() error {
-	// 获取窗口内最早的消息
-	messages, err := s.repo.GetOldestMessagesInWindow(s.sessionID, 1)
-	if err != nil || len(messages) == 0 {
-		return err
-	}
-
-	firstMsg := messages[0]
-
-	// 解析 ToolCalls
-	var toolCalls []types.ToolCall
-	if firstMsg.Role == types.RoleAssistant && firstMsg.ToolCalls != "" {
-		if err := json.Unmarshal([]byte(firstMsg.ToolCalls), &toolCalls); err != nil {
-			slog.Warn("failed to unmarshal tool calls", "error", err)
-		}
-	}
-
-	if len(toolCalls) > 0 {
-		// 收集 tool_call_id
-		toolCallIDs := make(map[string]bool)
-		for _, tc := range toolCalls {
-			toolCallIDs[tc.ID] = true
-		}
-
-		// 获取窗口内所有消息来查找关联的 tool 结果
-		allMessages, err := s.repo.GetMessagesInWindow(s.sessionID, 0)
-		if err != nil {
-			return err
-		}
-
-		// 找到需要标记为窗口外的消息 ID
-		var messageIDsToEvict []string
-		messageIDsToEvict = append(messageIDsToEvict, firstMsg.ID)
-
-		// 从第二条消息开始查找关联的 tool 结果
-		for i := 1; i < len(allMessages); i++ {
-			msg := allMessages[i]
-			if msg.Role == types.RoleTool && toolCallIDs[msg.ToolCallID] {
-				messageIDsToEvict = append(messageIDsToEvict, msg.ID)
-				delete(toolCallIDs, msg.ToolCallID)
-			} else {
-				break // 遇到非匹配消息，停止
-			}
-		}
-
-		// 标记消息为窗口外
-		return s.repo.EvictMessages(s.sessionID, messageIDsToEvict)
-	}
-
-	// 普通消息，直接标记最早的一条为窗口外
-	return s.repo.EvictOldestMessagesInWindow(s.sessionID, 1)
 }
 
 // GetHistory 获取会话历史消息（只返回窗口内消息）

@@ -34,7 +34,7 @@ async function loadMessages(beforeId?: string) {
     }
 
     const response = await sessionApi.getSessionMessages(sessionId.value, beforeId, 20)
-    
+
     if (beforeId) {
       // 加载更多，将新消息插入到前面
       messages.value = [...response.messages, ...messages.value]
@@ -42,7 +42,7 @@ async function loadMessages(beforeId?: string) {
       // 首次加载
       messages.value = response.messages
     }
-    
+
     hasMore.value = response.has_more
     total.value = response.total
   } catch (error) {
@@ -56,7 +56,7 @@ async function loadMessages(beforeId?: string) {
 // 加载更多消息
 async function loadMore() {
   if (loadingMore.value || !hasMore.value || messages.value.length === 0) return
-  
+
   // 获取最早的消息ID
   const firstMessage = messages.value[0]
   if (firstMessage) {
@@ -149,7 +149,9 @@ onMounted(async () => {
         <div class="card-header">
           <div class="header-left">
             <Button type="text" @click="goBack">
-              <template #icon><ArrowLeftOutlined /></template>
+              <template #icon>
+                <ArrowLeftOutlined />
+              </template>
             </Button>
             <span class="title">会话消息</span>
             <Typography.Text type="secondary" class="total-count">
@@ -158,7 +160,9 @@ onMounted(async () => {
           </div>
           <div class="header-right">
             <Button type="text" @click="refresh" :loading="loading">
-              <template #icon><ReloadOutlined /></template>
+              <template #icon>
+                <ReloadOutlined />
+              </template>
               刷新
             </Button>
           </div>
@@ -166,11 +170,7 @@ onMounted(async () => {
       </template>
 
       <Spin :spinning="loading">
-        <div
-          ref="messagesContainer"
-          class="messages-container"
-          @scroll="handleScroll"
-        >
+        <div ref="messagesContainer" class="messages-container" @scroll="handleScroll">
           <!-- 加载更多提示 -->
           <div v-if="hasMore" class="load-more">
             <Button type="link" @click="loadMore" :loading="loadingMore">
@@ -180,12 +180,8 @@ onMounted(async () => {
 
           <!-- 消息列表 -->
           <div v-if="messages.length > 0" class="message-list">
-            <div
-              v-for="message in messages"
-              :key="message.id"
-              class="message-item"
-              :class="[`message-${message.role}`]"
-            >
+            <div v-for="message in messages" :key="message.id" class="message-item"
+              :class="[`message-${message.role}`]">
               <!-- 消息头部 -->
               <div class="message-header">
                 <Tag :color="getRoleColor(message.role)" class="role-tag">
@@ -225,7 +221,7 @@ onMounted(async () => {
 
                 <!-- 文本内容 -->
                 <div v-if="message.content" class="message-text">
-                  <MarkdownRenderer :content="message.content" />
+                  {{ message.content }}
                 </div>
 
                 <!-- 工具响应 -->

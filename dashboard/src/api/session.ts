@@ -1,5 +1,5 @@
 import { http, type ApiResponse, type PageResponse } from '@/utils/http'
-import type { SessionListItem, MessagesResponse } from '@/types/session'
+import type { SessionListItem, MessagesResponse, CompressSessionRequest, CompressSessionResponse } from '@/types/session'
 
 /**
  * 会话 API 服务
@@ -36,6 +36,22 @@ export const sessionApi = {
     const response = await http.get<MessagesResponse>(`/sessions/${sessionId}/messages`, {
       params,
     })
+    return response.data
+  },
+
+  /**
+   * 压缩会话上下文
+   * @param sessionId 会话ID
+   * @param request 压缩请求参数
+   */
+  async compressSession(
+    sessionId: string,
+    request?: CompressSessionRequest,
+  ): Promise<CompressSessionResponse> {
+    const response = await http.post<CompressSessionResponse>(
+      `/sessions/${sessionId}/compress`,
+      request || {},
+    )
     return response.data
   },
 }

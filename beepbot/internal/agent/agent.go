@@ -19,15 +19,6 @@ import (
 // 工具调用连续出错次数，达到这个次数将提示智能体提前结束或尝试其他方案
 const toolErrorThreshold = 3
 
-// 压缩提示词，用于让 LLM 生成历史消息摘要
-const compressionPrompt = `请将以下对话历史压缩成简洁的摘要，保留关键信息：
-1. 用户的主要请求和目标
-2. 已完成的重要操作和结果
-3. 当前任务状态和待办事项
-4. 重要的上下文信息
-
-摘要应该简洁明了，便于后续对话参考。`
-
 type AgentRunner struct {
 	model        types.LLMProvider
 	bus          *channel.MessageBus

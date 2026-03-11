@@ -56,7 +56,6 @@ export interface Agent {
   max_iterations: number
   max_output_tokens: number
   working_dir: string
-  window_size: number
   compression_ratio: number
   compression_keep_size: number
   context_max_tokens: number
@@ -77,7 +76,6 @@ export interface AgentDefaults {
   temperature: number
   max_iterations: number
   max_output_tokens: number
-  window_size: number
   compression_ratio: number
   compression_keep_size: number
   context_max_tokens: number
@@ -105,7 +103,6 @@ export interface CreateAgentRequest {
   temperature?: number
   max_iterations?: number
   max_output_tokens?: number
-  window_size?: number
   compression_ratio?: number
   compression_keep_size?: number
   context_max_tokens?: number
@@ -127,7 +124,6 @@ export interface UpdateAgentRequest {
   max_iterations?: number
   max_output_tokens?: number
   working_dir?: string
-  window_size?: number
   compression_ratio?: number
   compression_keep_size?: number
   context_max_tokens?: number
