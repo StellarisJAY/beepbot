@@ -137,10 +137,6 @@ func buildOpenAICompletionsParams(messages []types.Message, model string, option
 		params.ExtraFields()["enable_thinking"] = false
 	}
 
-	// 4. 工具
-	// 网络搜索工具
-	params.ExtraFields()["enable_search"] = true
-
 	// 系统内置工具
 	if len(options.Tools) > 0 {
 		params.Tools = make([]openai.ChatCompletionToolUnionParam, 0, len(options.Tools))
