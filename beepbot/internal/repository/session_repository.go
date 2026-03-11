@@ -20,6 +20,7 @@ type SessionRepository interface {
 	GetSessionByID(id string) (*types.Session, error)
 	UpdateSession(session *types.Session) error
 	UpdateSessionSummary(sessionID string, summary string) error
+	UpdateSessionContextTokens(sessionID string, tokens int64) error
 	DeleteSession(id string) error
 
 	// GetSessionsByAgentID 根据智能体ID分页查询会话列表
@@ -43,7 +44,6 @@ type SessionRepository interface {
 
 	// 窗口内消息操作
 	CountMessagesInWindow(sessionID string) (int64, error)
-	GetTokenUsageInWindow(sessionID string) (int64, error)
 	GetOldestMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
 	GetMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
 	EvictMessages(sessionID string, messageIDs []string) error
@@ -93,6 +93,11 @@ func (r *SessionRepositoryImpl) UpdateSession(session *types.Session) error {
 // UpdateSessionSummary 只更新会话的 summary 字段
 func (r *SessionRepositoryImpl) UpdateSessionSummary(sessionID string, summary string) error {
 	return r.db.Model(&types.Session{}).Where("id = ?", sessionID).Update("summary", summary).Error
+}
+
+// UpdateSessionContextTokens 更新会话的上下文 token 大小
+func (r *SessionRepositoryImpl) UpdateSessionContextTokens(sessionID string, tokens int64) error {
+	return r.db.Model(&types.Session{}).Where("id = ?", sessionID).Update("last_context_tokens", tokens).Error
 }
 
 // GetSessionsByAgentID 根据智能体ID分页查询会话列表
@@ -297,16 +302,6 @@ func (r *SessionRepositoryImpl) CountMessagesInWindow(sessionID string) (int64, 
 		Where("session_id = ? AND in_window = ?", sessionID, true).
 		Count(&count).Error
 	return count, err
-}
-
-// GetTokenUsageInWindow 获取窗口内的 token 用量
-func (r *SessionRepositoryImpl) GetTokenUsageInWindow(sessionID string) (int64, error) {
-	var total int64
-	err := r.db.Model(&types.SessionMessage{}).
-		Where("session_id = ? AND in_window = ?", sessionID, true).
-		Select("COALESCE(SUM(total_tokens), 0)").
-		Scan(&total).Error
-	return total, err
 }
 
 // GetOldestMessagesInWindow 获取窗口内最早的消息

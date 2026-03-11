@@ -22,9 +22,9 @@ type ApiSession struct {
 	compressionRatio    float64
 	compressionKeepSize int
 
-	tokenUsed    int64
-	needCompress bool
-	summary      string
+	contextTokens int64 // 当前上下文 token 大小（最后一次 LLM 调用的 InputTokens）
+	needCompress  bool
+	summary       string
 
 	repo  repository.SessionRepository
 	mutex *sync.RWMutex
@@ -59,13 +59,6 @@ func NewApiSession(
 		}
 	}
 
-	// 从数据库聚合计算窗口内 token 用量
-	tokenUsed, err := repo.GetTokenUsageInWindow(session.ID)
-	if err != nil {
-		slog.Warn("failed to get token usage", "sessionID", session.ID, "error", err)
-		tokenUsed = 0
-	}
-
 	return &ApiSession{
 		sessionID:           session.ID,
 		key:                 key,
@@ -74,7 +67,7 @@ func NewApiSession(
 		maxTokens:           maxTokens,
 		compressionRatio:    compressionRatio,
 		compressionKeepSize: compressionKeepSize,
-		tokenUsed:           tokenUsed,
+		contextTokens:       session.LastContextTokens, // 从数据库加载上下文 token 大小
 		summary:             session.Summary,
 		repo:                repo,
 		mutex:               &sync.RWMutex{},
@@ -103,15 +96,21 @@ func (s *ApiSession) AppendMessage(message types.Message) bool {
 		slog.Error("failed to append message", "sessionID", s.sessionID, "error", err)
 	}
 
-	// 更新内存中的 token 用量
-	if message.Usage != nil {
-		s.tokenUsed += message.Usage.InputTokens + message.Usage.OutputTokens
+	// 更新上下文 token 大小
+	// 只有 assistant 消息才有 Usage（来自 LLM API 响应）
+	// InputTokens 已经包含了发送给 LLM 的所有内容的 token 数（系统提示词 + 历史消息 + 当前消息）
+	if message.Usage != nil && message.Role == types.RoleAssistant {
+		s.contextTokens = message.Usage.InputTokens
+		// 持久化到数据库
+		if err := s.repo.UpdateSessionContextTokens(s.sessionID, s.contextTokens); err != nil {
+			slog.Error("failed to update context tokens", "sessionID", s.sessionID, "error", err)
+		}
 	}
 
 	// 检查是否需要压缩
-	if s.maxTokens > 0 && s.tokenUsed >= int64(float64(s.maxTokens)*s.compressionRatio) {
+	if s.maxTokens > 0 && s.contextTokens >= int64(float64(s.maxTokens)*s.compressionRatio) {
 		s.needCompress = true
-		slog.Debug("session needs compression", "sessionKey", s.key, "tokenUsed", s.tokenUsed, "maxTokens", s.maxTokens, "ratio", s.compressionRatio)
+		slog.Debug("session needs compression", "sessionKey", s.key, "contextTokens", s.contextTokens, "maxTokens", s.maxTokens, "ratio", s.compressionRatio)
 	}
 
 	return s.needCompress
@@ -239,8 +238,11 @@ func (s *ApiSession) ClearHistory() {
 		}
 	}
 
-	// 清空后重新计算 token 用量（应为 0）
-	s.tokenUsed, _ = s.repo.GetTokenUsageInWindow(s.sessionID)
+	// 清空后重置上下文 token 大小
+	s.contextTokens = 0
+	if err := s.repo.UpdateSessionContextTokens(s.sessionID, 0); err != nil {
+		slog.Error("failed to reset context tokens", "sessionID", s.sessionID, "error", err)
+	}
 }
 
 // Compress 压缩历史消息，保留最近的消息
@@ -275,8 +277,11 @@ func (s *ApiSession) Compress() []types.Message {
 		return nil
 	}
 
-	// 重新从数据库聚合计算窗口内 token 用量
-	s.tokenUsed, _ = s.repo.GetTokenUsageInWindow(s.sessionID)
+	// 压缩后重置上下文 token 大小，下次 LLM 调用会更新准确值
+	s.contextTokens = 0
+	if err := s.repo.UpdateSessionContextTokens(s.sessionID, 0); err != nil {
+		slog.Error("failed to reset context tokens after compression", "sessionID", s.sessionID, "error", err)
+	}
 
 	// 返回被淘汰的消息（用于生成摘要）
 	removed := make([]types.Message, 0, evictCount)
@@ -286,11 +291,11 @@ func (s *ApiSession) Compress() []types.Message {
 	return removed
 }
 
-// GetTokenUsage 返回当前 token 用量
+// GetTokenUsage 返回当前上下文 token 大小
 func (s *ApiSession) GetTokenUsage() int64 {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	return s.tokenUsed
+	return s.contextTokens
 }
 
 // GetMaxTokens 返回 token 上限
