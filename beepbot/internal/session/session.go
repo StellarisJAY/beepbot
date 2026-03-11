@@ -35,5 +35,5 @@ type Session interface {
 	// GetMaxTokens 返回 token 上限
 	GetMaxTokens() int64
 
-	GetSessionKey(channelID string, chatID string, userID string) string
+	GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string
 }

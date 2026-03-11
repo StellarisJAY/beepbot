@@ -1,6 +1,10 @@
 package channel
 
-import "context"
+import (
+	"context"
+
+	"github.com/StellarisJAY/beepbot/internal/types"
+)
 
 type MessageType byte
 
@@ -10,14 +14,15 @@ const (
 )
 
 type InboundMessage struct {
-	Channel    string
-	UserID     string // 发送者ID（QQ用户ID / 飞书 open_id）
-	GroupID    string // 群聊ID（仅群聊时有值，用于@回复等场景）
-	ChatID     string // 会话ID（飞书 chat_id，用于主动推送）
-	MessageID  string
-	SessionKey string
-	Content    string
-	AgentID    string // 定时任务直接指定智能体ID，机器人消息为空
+	Channel     string
+	UserID      string // 发送者ID（QQ用户ID / 飞书 open_id）
+	GroupID     string // 群聊ID（仅群聊时有值，用于@回复等场景）
+	ChatID      string // 会话ID（飞书 chat_id，用于主动推送）
+	MessageID   string
+	SessionKey  string
+	Content     string
+	AgentID     string            // 定时任务直接指定智能体ID，机器人消息为空
+	SessionType types.SessionType // 会话类型：chat/cron
 }
 
 type OutboundMessage struct {

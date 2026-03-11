@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/tencent-connect/botgo"
 	"github.com/tencent-connect/botgo/dto"
 	"github.com/tencent-connect/botgo/event"
@@ -138,10 +139,11 @@ func (c *QQBotChannel) CreateC2CMessageHandler(ctx context.Context) event.C2CMes
 		senderID := data.Author.ID
 		slog.Debug("receive QQ c2c message", "userID", senderID)
 		message := InboundMessage{
-			Channel:   c.ID(),
-			UserID:    senderID,
-			Content:   data.Content,
-			MessageID: data.ID,
+			Channel:     c.ID(),
+			UserID:      senderID,
+			Content:     data.Content,
+			MessageID:   data.ID,
+			SessionType: types.SessionTypeChat,
 		}
 		if err := c.BaseChannel.HandleMessage(ctx, message); err != nil {
 			return fmt.Errorf("handle qq message failed, handle message error: %w", err)
@@ -156,11 +158,12 @@ func (c *QQBotChannel) CreateGroupMessageHandler(ctx context.Context) event.Grou
 		groupID := data.GroupID
 		slog.Debug("receive QQ Group @beepbot", "groupID", groupID, "senderID", senderID)
 		message := InboundMessage{
-			Channel:   c.ID(),
-			GroupID:   groupID,
-			UserID:    senderID,
-			Content:   data.Content,
-			MessageID: data.ID,
+			Channel:     c.ID(),
+			GroupID:     groupID,
+			UserID:      senderID,
+			Content:     data.Content,
+			MessageID:   data.ID,
+			SessionType: types.SessionTypeChat,
 		}
 		if err := c.BaseChannel.HandleMessage(ctx, message); err != nil {
 			return fmt.Errorf("handle qq group message failed, error: %w", err)

@@ -19,6 +19,7 @@ type SessionListItem struct {
 	MessageCount      int64             `json:"message_count"`
 	TotalTokens       int64             `json:"total_tokens"`
 	LastContextTokens int64             `json:"last_context_tokens"` // 当前上下文 token 数量
+	SessionType       types.SessionType `json:"session_type"`        // 会话类型，cron或chat
 	CreatedAt         time.Time         `json:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at"`
 }
@@ -84,6 +85,7 @@ func (s *SessionService) GetSessionsByAgent(agentID string, page, pageSize int) 
 			LastContextTokens: session.LastContextTokens,
 			CreatedAt:         session.CreatedAt,
 			UpdatedAt:         session.UpdatedAt,
+			SessionType:       session.SessionType,
 		}
 		if bot, ok := botMap[session.BotID]; ok {
 			item.BotName = bot.Name

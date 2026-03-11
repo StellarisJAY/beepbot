@@ -117,11 +117,17 @@ func NewApiAgentRunner(
 
 // RunWithMessage 使用消息创建会话并运行 AgentLoop
 func (r *ApiAgentRunner) RunWithMessage(ctx context.Context, message channel.InboundMessage) error {
+	// 获取会话类型，默认为聊天类型
+	sessionType := message.SessionType
+	if sessionType == "" {
+		sessionType = types.SessionTypeChat
+	}
+
 	// 生成会话 Key（使用 ChatID）
-	sessionKey := r.GetSessionKey(message.Channel, message.ChatID, message.UserID)
+	sessionKey := r.GetSessionKey(sessionType, message.Channel, message.ChatID, message.UserID)
 
 	// 创建或加载会话
-	sess, err := r.createSession(sessionKey, message.Channel)
+	sess, err := r.createSession(sessionKey, message.Channel, sessionType)
 	if err != nil {
 		return err
 	}
@@ -132,12 +138,13 @@ func (r *ApiAgentRunner) RunWithMessage(ctx context.Context, message channel.Inb
 }
 
 // createSession 创建或加载 API 会话
-func (r *ApiAgentRunner) createSession(sessionKey string, botID string) (session.Session, error) {
+func (r *ApiAgentRunner) createSession(sessionKey string, botID string, sessionType types.SessionType) (session.Session, error) {
 	return session.NewApiSession(
 		r.sessionRepo,
 		sessionKey,
 		r.agentDef.ID,
 		botID,
+		sessionType,
 		r.maxTokens,
 		r.compressionRatio,
 		r.compressionKeepSize,
@@ -145,6 +152,6 @@ func (r *ApiAgentRunner) createSession(sessionKey string, botID string) (session
 }
 
 // GetSessionKey 生成会话 Key
-func (r *ApiAgentRunner) GetSessionKey(channelID, chatID, userID string) string {
-	return session.GetApiSessionKey(r.agentDef.ID, channelID, chatID, userID)
+func (r *ApiAgentRunner) GetSessionKey(sessionType types.SessionType, channelID, chatID, userID string) string {
+	return session.GetApiSessionKey(sessionType, r.agentDef.ID, channelID, chatID, userID)
 }

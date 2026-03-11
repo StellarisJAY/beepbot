@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/skill"
@@ -204,6 +205,9 @@ func (b *contextBuilder) prebuild() {
 	}
 }
 
+// buildContext 构造上下文
+// 上下文顺序：内置提示词, 工作空间, 用户配置的提示词, 技能列表, 记忆内容, 压缩上下文, 历史消息, 系统时间
+// 上下文组织核心点：为保证缓存命中，不变的信息靠前，变化的信息靠后。
 func (b *contextBuilder) buildContext() []types.Message {
 	messages := b.prebuiltMessages
 
@@ -227,6 +231,12 @@ func (b *contextBuilder) buildContext() []types.Message {
 
 	// 历史消息（放在当前用户请求之前）
 	messages = append(messages, b.session.GetHistory()...)
+
+	// 注入系统当前时间
+	messages = append(messages, types.Message{
+		Role:    types.RoleSystem,
+		Content: fmt.Sprintf("<system_time>%s</system_time>\n\n", time.Now().Format(time.DateTime)),
+	})
 	return messages
 }
 

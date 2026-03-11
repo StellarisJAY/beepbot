@@ -145,13 +145,14 @@ func (s *Scheduler) triggerJob(job types.CronJob) {
 
 		// 构造带会话信息的 InboundMessage，智能体处理完成后会推送到原会话
 		msg := channel.InboundMessage{
-			Channel:   *job.PushBotID, // 使用 BotID 作为 Channel（用于 OutboundMessage 分发）
-			UserID:    ptrToString(job.PushUserID),
-			GroupID:   ptrToString(job.PushGroupID),
-			ChatID:    *job.PushChatID,
-			MessageID: fmt.Sprintf("cron-push-%s-%d", job.ID, time.Now().Unix()),
-			Content:   job.Message,
-			AgentID:   job.AgentID,
+			Channel:     *job.PushBotID, // 使用 BotID 作为 Channel（用于 OutboundMessage 分发）
+			UserID:      ptrToString(job.PushUserID),
+			GroupID:     ptrToString(job.PushGroupID),
+			ChatID:      *job.PushChatID,
+			MessageID:   fmt.Sprintf("cron-push-%s-%d", job.ID, time.Now().Unix()),
+			Content:     job.Message,
+			AgentID:     job.AgentID,
+			SessionType: types.SessionTypeCron, // 定时任务会话
 		}
 
 		slog.Info("Cron job with push info, routing to original session",
@@ -169,12 +170,13 @@ func (s *Scheduler) triggerJob(job types.CronJob) {
 // triggerCronChannel 通过 cron channel 触发定时任务
 func (s *Scheduler) triggerCronChannel(job types.CronJob) {
 	msg := channel.InboundMessage{
-		Channel:   channel.ChannelCron,
-		UserID:    job.ID,
-		GroupID:   "",
-		MessageID: fmt.Sprintf("cron-%s-%d", job.ID, time.Now().Unix()),
-		Content:   job.Message,
-		AgentID:   job.AgentID,
+		Channel:     channel.ChannelCron,
+		UserID:      job.ID,
+		GroupID:     "",
+		MessageID:   fmt.Sprintf("cron-%s-%d", job.ID, time.Now().Unix()),
+		Content:     job.Message,
+		AgentID:     job.AgentID,
+		SessionType: types.SessionTypeCron, // 定时任务会话
 	}
 	s.bus.PublishInbound(context.Background(), msg)
 }

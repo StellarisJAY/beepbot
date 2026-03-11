@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/StellarisJAY/beepbot/internal/types"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
@@ -258,12 +259,13 @@ func (c *FeishuChannel) handleMessage(ctx context.Context, event *larkim.P2Messa
 
 	// 构建入站消息
 	inboundMsg := InboundMessage{
-		Channel:   c.ID(),
-		UserID:    senderID,
-		GroupID:   groupID, // 仅群聊时有值
-		ChatID:    chatID,  // 始终有值，用于主动推送
-		MessageID: messageID,
-		Content:   textContent,
+		Channel:     c.ID(),
+		UserID:      senderID,
+		GroupID:     groupID, // 仅群聊时有值
+		ChatID:      chatID,  // 始终有值，用于主动推送
+		MessageID:   messageID,
+		Content:     textContent,
+		SessionType: types.SessionTypeChat,
 	}
 
 	// 发布到 MessageBus

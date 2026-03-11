@@ -23,7 +23,7 @@ type CronJob struct {
 
 	// 会话推送信息（用于智能体处理完成后推送响应）
 	// 只有用户通过智能体对话创建的定时任务才有推送信息
-	PushChannel *string `json:"push_channel,omitempty" gorm:"column:push_channel;type:varchar(32)"`   // 推送渠道类型：qq/feishu
+	PushChannel *string `json:"push_channel,omitempty" gorm:"column:push_channel;type:varchar(64)"`   // 推送渠道类型：qq/feishu
 	PushBotID   *string `json:"push_bot_id,omitempty" gorm:"column:push_bot_id;type:varchar(64)"`     // 推送机器人ID
 	PushUserID  *string `json:"push_user_id,omitempty" gorm:"column:push_user_id;type:varchar(64)"`   // 推送目标用户ID
 	PushGroupID *string `json:"push_group_id,omitempty" gorm:"column:push_group_id;type:varchar(64)"` // 推送目标群ID（群聊时）

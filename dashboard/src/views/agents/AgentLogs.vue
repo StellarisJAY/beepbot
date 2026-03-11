@@ -29,6 +29,13 @@ const columns: TableProps['columns'] = [
     ellipsis: true,
   },
   {
+    title: '类型',
+    dataIndex: 'session_type',
+    key: 'session_type',
+    width: 90,
+    align: 'center',
+  },
+  {
     title: '机器人',
     dataIndex: 'bot_name',
     key: 'bot_name',
@@ -72,6 +79,24 @@ const columns: TableProps['columns'] = [
     width: 160,
   },
 ]
+
+// 会话类型颜色映射
+const getSessionTypeColor = (type: string): string => {
+  const colors: Record<string, string> = {
+    chat: 'blue',
+    cron: 'orange',
+  }
+  return colors[type] || 'default'
+}
+
+// 会话类型标签
+const getSessionTypeLabel = (type: string): string => {
+  const labels: Record<string, string> = {
+    chat: '聊天',
+    cron: '定时任务',
+  }
+  return labels[type] || type
+}
 
 // 获取会话列表
 const fetchSessions = async () => {
@@ -174,7 +199,12 @@ onMounted(() => {
         })"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'bot_platform'">
+          <template v-if="column.key === 'session_type'">
+            <Tag :color="getSessionTypeColor(record.session_type)">
+              {{ getSessionTypeLabel(record.session_type) }}
+            </Tag>
+          </template>
+          <template v-else-if="column.key === 'bot_platform'">
             <Tag :color="getPlatformColor(record.bot_platform)">
               {{ record.bot_platform?.toUpperCase() || '-' }}
             </Tag>

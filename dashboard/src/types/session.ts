@@ -1,3 +1,6 @@
+// 会话类型
+export type SessionType = 'chat' | 'cron'
+
 // 会话列表项
 export interface SessionListItem {
   id: string
@@ -5,6 +8,7 @@ export interface SessionListItem {
   bot_id: string
   bot_name: string
   bot_platform: string
+  session_type: SessionType // 会话类型：chat/cron
   summary: string
   message_count: number
   total_tokens: number
@@ -47,4 +51,15 @@ export interface MessagesResponse {
   messages: MessageListItem[]
   total: number
   has_more: boolean
+}
+
+// 压缩会话请求
+export interface CompressSessionRequest {
+  session_id: string
+}
+
+// 压缩会话响应
+export interface CompressSessionResponse {
+  success: boolean
+  message: string
 }

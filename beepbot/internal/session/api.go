@@ -35,6 +35,7 @@ func NewApiSession(
 	key string,
 	agentID string,
 	botID string,
+	sessionType types.SessionType,
 	maxTokens int64,
 	compressionRatio float64,
 	compressionKeepSize int,
@@ -48,9 +49,10 @@ func NewApiSession(
 	// 创建新会话
 	if session == nil {
 		session = &types.Session{
-			Key:     key,
-			AgentID: agentID,
-			BotID:   botID,
+			Key:         key,
+			AgentID:     agentID,
+			BotID:       botID,
+			SessionType: sessionType,
 		}
 		if err := repo.CreateSession(session); err != nil {
 			return nil, err
@@ -236,16 +238,17 @@ func (s *ApiSession) GetMaxTokens() int64 {
 }
 
 // GetSessionKey 生成会话 Key
-func (s *ApiSession) GetSessionKey(channelID string, chatID string, userID string) string {
-	return GetApiSessionKey(s.agentID, channelID, chatID, userID)
+func (s *ApiSession) GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string {
+	return GetApiSessionKey(sessionType, s.agentID, channelID, chatID, userID)
 }
 
 // GetApiSessionKey 生成 API 模式的会话 Key
-// 包含 agentID 以隔离不同智能体的会话
-// 格式：{agentID}:{channelID}:{chatID}:{userID}
+// 包含 sessionType 和 agentID 以隔离不同类型和智能体的会话
+// 格式：{sessionType}:{agentID}:{channelID}:{chatID}:{userID}
+// - sessionType: 会话类型（chat/cron）
 // - chatID: 飞书为 chat_id，QQ 为群ID或空（私聊）
-func GetApiSessionKey(agentID string, channelID string, chatID string, userID string) string {
-	return fmt.Sprintf("%s:%s:%s:%s", agentID, channelID, chatID, userID)
+func GetApiSessionKey(sessionType types.SessionType, agentID string, channelID string, chatID string, userID string) string {
+	return fmt.Sprintf("%s:%s:%s:%s:%s", sessionType, agentID, channelID, chatID, userID)
 }
 
 // convertToSessionMessage 将 types.Message 转换为 types.SessionMessage
