@@ -80,16 +80,6 @@ func (s *ApiSession) AppendMessage(message types.Message) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// 检查是否需要淘汰消息（只统计窗口内消息）
-	count, err := s.repo.CountMessagesInWindow(s.sessionID)
-	if err != nil {
-		slog.Error("failed to count messages in window", "sessionID", s.sessionID, "error", err)
-	} else if count >= int64(s.windowSize) {
-		if err := s.evictMessage(); err != nil {
-			slog.Error("failed to evict message", "sessionID", s.sessionID, "error", err)
-		}
-	}
-
 	// 转换并保存消息（包含 token 信息）
 	sessionMsg := s.convertToSessionMessage(message)
 	if err := s.repo.AppendMessage(s.sessionID, sessionMsg); err != nil {
@@ -176,7 +166,7 @@ func (s *ApiSession) GetHistory() []types.Message {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	messages, err := s.repo.GetMessagesInWindow(s.sessionID, s.windowSize)
+	messages, err := s.repo.GetMessagesInWindow(s.sessionID, -1)
 	if err != nil {
 		slog.Error("failed to get messages in window", "sessionID", s.sessionID, "error", err)
 		return nil

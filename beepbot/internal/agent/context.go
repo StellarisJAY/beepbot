@@ -218,13 +218,6 @@ func (b *contextBuilder) buildContext() []types.Message {
 
 	// 历史消息（放在当前用户请求之前）
 	messages = append(messages, b.session.GetHistory()...)
-
-	// 当前用户请求（放在历史消息之后）
-	messages = append(messages, types.Message{
-		Content: b.userInstruction,
-		Role:    types.RoleUser,
-	})
-
 	return messages
 }
 

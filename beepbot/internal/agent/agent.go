@@ -92,6 +92,12 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 		workingDir:      a.workingDir,    // 工作目录
 		userInstruction: message.Content, // 用户请求
 	}
+
+	sess.AppendMessage(types.Message{
+		Role:    types.RoleUser,
+		Content: message.Content,
+	})
+
 	// 提前构建固定的上下文内容
 	contextBuilder.prebuild()
 
