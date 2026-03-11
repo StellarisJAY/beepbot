@@ -299,14 +299,16 @@ func (s *ApiSession) GetMaxTokens() int64 {
 }
 
 // GetSessionKey 生成会话 Key
-func (s *ApiSession) GetSessionKey(channelID string, groupID string, userID string) string {
-	return GetApiSessionKey(s.agentID, channelID, groupID, userID)
+func (s *ApiSession) GetSessionKey(channelID string, chatID string, userID string) string {
+	return GetApiSessionKey(s.agentID, channelID, chatID, userID)
 }
 
 // GetApiSessionKey 生成 API 模式的会话 Key
 // 包含 agentID 以隔离不同智能体的会话
-func GetApiSessionKey(agentID string, channelID string, groupID string, userID string) string {
-	return fmt.Sprintf("%s:%s:%s:%s", agentID, channelID, groupID, userID)
+// 格式：{agentID}:{channelID}:{chatID}:{userID}
+// - chatID: 飞书为 chat_id，QQ 为群ID或空（私聊）
+func GetApiSessionKey(agentID string, channelID string, chatID string, userID string) string {
+	return fmt.Sprintf("%s:%s:%s:%s", agentID, channelID, chatID, userID)
 }
 
 // convertToSessionMessage 将 types.Message 转换为 types.SessionMessage

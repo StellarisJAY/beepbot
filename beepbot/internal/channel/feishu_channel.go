@@ -180,10 +180,17 @@ func (c *FeishuChannel) sendMarkdownMessage(ctx context.Context, message Outboun
 }
 
 // getReceiveID 获取接收者 ID
+// 优先使用 ChatID（飞书统一使用 chat_id 发送）
 func (c *FeishuChannel) getReceiveID(message OutboundMessage) string {
+	// 优先使用 ChatID
+	if message.ChatID != "" {
+		return message.ChatID
+	}
+	// 其次使用 GroupID（群聊）
 	if message.GroupID != "" {
 		return message.GroupID
 	}
+	// 最后使用 UserID
 	return message.UserID
 }
 
@@ -225,7 +232,20 @@ func (c *FeishuChannel) handleMessage(ctx context.Context, event *larkim.P2Messa
 		chatID = *msg.ChatId
 	}
 
-	slog.Debug("receive feishu message", "sender", senderID, "chat_id", chatID)
+	// 获取聊天类型（p2p 或 group）
+	var chatType string
+	if msg.ChatType != nil {
+		chatType = *msg.ChatType
+	}
+
+	// 根据聊天类型设置 GroupID
+	// 群聊时 GroupID = chatID，私聊时 GroupID 为空
+	var groupID string
+	if chatType == "group" {
+		groupID = chatID
+	}
+
+	slog.Debug("receive feishu message", "sender", senderID, "chat_id", chatID, "chat_type", chatType)
 
 	// 检查是否在允许列表中
 	if !c.IsAllowed(senderID) {
@@ -240,7 +260,8 @@ func (c *FeishuChannel) handleMessage(ctx context.Context, event *larkim.P2Messa
 	inboundMsg := InboundMessage{
 		Channel:   c.ID(),
 		UserID:    senderID,
-		GroupID:   chatID,
+		GroupID:   groupID, // 仅群聊时有值
+		ChatID:    chatID,  // 始终有值，用于主动推送
 		MessageID: messageID,
 		Content:   textContent,
 	}
@@ -285,4 +306,10 @@ func (c *FeishuChannel) IsAllowed(senderID string) bool {
 // IsAvailable 返回 Channel 是否可用
 func (c *FeishuChannel) IsAvailable() bool {
 	return c.BaseChannel.IsAvailable()
+}
+
+// CanPushProactively 返回是否支持主动推送
+// 飞书机器人支持主动推送，可以通过 chat_id 发送
+func (c *FeishuChannel) CanPushProactively() bool {
+	return true
 }

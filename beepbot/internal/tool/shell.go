@@ -223,7 +223,6 @@ func (s *ShellTool) buildDescription() string {
 	if len(s.forbiddenCommands) > 0 {
 		forbiddenList = strings.Join(s.forbiddenCommands, "\n")
 	}
-	slog.Info("forbidden shell commands", "cmds", s.forbiddenCommands)
 	return fmt.Sprintf(`执行 shell 命令并在指定工作目录中运行。
 
 <capabilities>

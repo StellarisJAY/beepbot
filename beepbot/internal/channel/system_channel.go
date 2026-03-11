@@ -37,6 +37,12 @@ func (s *systemChannel) Start(ctx context.Context) error {
 func (s *systemChannel) Stop() {
 }
 
+// CanPushProactively 返回是否支持主动推送
+// 系统渠道不支持推送
+func (s *systemChannel) CanPushProactively() bool {
+	return false
+}
+
 func newSystemChannel() Channel {
 	return &systemChannel{}
 }

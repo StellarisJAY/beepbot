@@ -12,6 +12,10 @@ type Channel interface {
 	IsAllowed(senderID string) bool
 	Start(ctx context.Context) error
 	Stop()
+	// CanPushProactively 返回是否支持主动推送消息（无需 InboundMessageID）
+	// QQ 机器人不支持主动推送，需要被动回复的 MessageID
+	// 飞书机器人支持主动推送，可以通过 chat_id 发送
+	CanPushProactively() bool
 }
 
 // BaseChannel 基础 Channel 实现

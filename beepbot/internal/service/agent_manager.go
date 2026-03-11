@@ -110,6 +110,7 @@ func (a *AgentManager) MessageLoop(ctx context.Context) {
 						Content:          "机器人没有绑定智能体，无法回复消息",
 						GroupID:          msg.GroupID,
 						UserID:           msg.UserID,
+						ChatID:           msg.ChatID,
 						InboundMessageID: msg.MessageID,
 					})
 					continue
@@ -123,6 +124,7 @@ func (a *AgentManager) MessageLoop(ctx context.Context) {
 						Content:          "智能体已被禁用",
 						GroupID:          msg.GroupID,
 						UserID:           msg.UserID,
+						ChatID:           msg.ChatID,
 						InboundMessageID: msg.MessageID,
 					})
 					continue

@@ -20,8 +20,17 @@ type CronJob struct {
 	AgentID        string        `json:"agent_id" gorm:"column:agent_id;type:varchar(64);index"`
 	Message        string        `json:"message" gorm:"column:message;type:text"`
 	Enabled        CronJobStatus `json:"enabled" gorm:"column:enabled;type:boolean;default:true;index"`
-	CreatedAt      time.Time     `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
-	UpdatedAt      time.Time     `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
+
+	// 会话推送信息（用于智能体处理完成后推送响应）
+	// 只有用户通过智能体对话创建的定时任务才有推送信息
+	PushChannel *string `json:"push_channel,omitempty" gorm:"column:push_channel;type:varchar(32)"`   // 推送渠道类型：qq/feishu
+	PushBotID   *string `json:"push_bot_id,omitempty" gorm:"column:push_bot_id;type:varchar(64)"`     // 推送机器人ID
+	PushUserID  *string `json:"push_user_id,omitempty" gorm:"column:push_user_id;type:varchar(64)"`   // 推送目标用户ID
+	PushGroupID *string `json:"push_group_id,omitempty" gorm:"column:push_group_id;type:varchar(64)"` // 推送目标群ID（群聊时）
+	PushChatID  *string `json:"push_chat_id,omitempty" gorm:"column:push_chat_id;type:varchar(64)"`   // 会话ID（飞书 chat_id）
+
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
 // TableName 指定表名

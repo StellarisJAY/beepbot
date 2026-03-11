@@ -15,20 +15,22 @@ import (
 
 // Scheduler 定时任务调度器
 type Scheduler struct {
-	cron     *cron.Cron
-	repo     repository.CronRepository
-	bus      *channel.MessageBus
-	entryMap map[string]cron.EntryID // job ID -> entry ID
-	mu       sync.RWMutex
+	cron           *cron.Cron
+	repo           repository.CronRepository
+	bus            *channel.MessageBus
+	channelManager *channel.ChannelManager // 用于获取 Channel 实例
+	entryMap       map[string]cron.EntryID // job ID -> entry ID
+	mu             sync.RWMutex
 }
 
 // NewScheduler 创建调度器
-func NewScheduler(repo repository.CronRepository, bus *channel.MessageBus) *Scheduler {
+func NewScheduler(repo repository.CronRepository, bus *channel.MessageBus, channelManager *channel.ChannelManager) *Scheduler {
 	return &Scheduler{
-		cron:     cron.New(cron.WithSeconds()), // 支持秒级 cron
-		repo:     repo,
-		bus:      bus,
-		entryMap: make(map[string]cron.EntryID),
+		cron:           cron.New(cron.WithSeconds()), // 支持秒级 cron
+		repo:           repo,
+		bus:            bus,
+		channelManager: channelManager,
+		entryMap:       make(map[string]cron.EntryID),
 	}
 }
 
@@ -122,12 +124,50 @@ func (s *Scheduler) UpdateJob(job types.CronJob) error {
 func (s *Scheduler) triggerJob(job types.CronJob) {
 	slog.Info("Cron job triggered", "id", job.ID, "name", job.Name, "agent_id", job.AgentID)
 
-	// 构造 InboundMessage
-	// Channel: "cron"
-	// UserID: 定时任务 ID
-	// GroupID: 空
-	// Content: 任务消息内容
-	// AgentID: 定时任务绑定的智能体ID
+	// 检查是否有推送信息（通过智能体对话创建的定时任务）
+	if job.PushBotID != nil && job.PushChatID != nil && s.channelManager != nil {
+		// 尝试获取 Channel
+		ch, exists := s.channelManager.GetChannel(*job.PushBotID)
+		if !exists {
+			slog.Warn("Channel not found for push, falling back to cron channel",
+				"job_id", job.ID, "bot_id", *job.PushBotID)
+			s.triggerCronChannel(job)
+			return
+		}
+
+		// 检查是否支持主动推送
+		if !ch.CanPushProactively() {
+			slog.Warn("Channel does not support proactive push, falling back to cron channel",
+				"job_id", job.ID, "channel", *job.PushChannel)
+			s.triggerCronChannel(job)
+			return
+		}
+
+		// 构造带会话信息的 InboundMessage，智能体处理完成后会推送到原会话
+		msg := channel.InboundMessage{
+			Channel:   *job.PushBotID, // 使用 BotID 作为 Channel（用于 OutboundMessage 分发）
+			UserID:    ptrToString(job.PushUserID),
+			GroupID:   ptrToString(job.PushGroupID),
+			ChatID:    *job.PushChatID,
+			MessageID: fmt.Sprintf("cron-push-%s-%d", job.ID, time.Now().Unix()),
+			Content:   job.Message,
+			AgentID:   job.AgentID,
+		}
+
+		slog.Info("Cron job with push info, routing to original session",
+			"job_id", job.ID, "bot_id", *job.PushBotID, "chat_id", *job.PushChatID)
+
+		// 发送到 MessageBus，智能体处理完成后会推送到原会话
+		s.bus.PublishInbound(context.Background(), msg)
+		return
+	}
+
+	// 无推送信息，走 cron channel（平台手动创建的定时任务）
+	s.triggerCronChannel(job)
+}
+
+// triggerCronChannel 通过 cron channel 触发定时任务
+func (s *Scheduler) triggerCronChannel(job types.CronJob) {
 	msg := channel.InboundMessage{
 		Channel:   channel.ChannelCron,
 		UserID:    job.ID,
@@ -136,9 +176,15 @@ func (s *Scheduler) triggerJob(job types.CronJob) {
 		Content:   job.Message,
 		AgentID:   job.AgentID,
 	}
-
-	// 发送到 MessageBus
 	s.bus.PublishInbound(context.Background(), msg)
+}
+
+// ptrToString 安全地将 *string 转换为 string
+func ptrToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // Reload 重新加载所有定时任务

@@ -125,7 +125,7 @@ func main() {
 
 	// 初始化并启动定时任务调度器（需要在 AgentManager 之前初始化）
 	var cronScheduler *cronscheduler.Scheduler
-	cronScheduler = cronscheduler.NewScheduler(cronRepo, messageBus)
+	cronScheduler = cronscheduler.NewScheduler(cronRepo, messageBus, channelManager)
 	if err := cronScheduler.Start(ctx); err != nil {
 		slog.Error("Failed to start cron scheduler", "error", err)
 	} else {

@@ -18,7 +18,19 @@ type contextKey string
 const (
 	// AgentIDKey 上下文中智能体ID的键
 	AgentIDKey contextKey = "agentID"
+	// SessionInfoKey 上下文中会话推送信息的键
+	SessionInfoKey contextKey = "sessionInfo"
 )
+
+// SessionPushInfo 会话推送信息，用于定时任务主动推送
+type SessionPushInfo struct {
+	Channel string // 渠道类型（Bot.Platform）
+	BotID   string // 机器人ID（Channel ID）
+	UserID  string // 发送者ID
+	GroupID string // 群聊ID（仅群聊时有值）
+	ChatID  string // 会话ID（飞书 chat_id）
+	AgentID string // 当前智能体ID
+}
 
 // CronServiceInterface 定时任务服务接口，用于解耦
 type CronServiceInterface interface {
@@ -97,7 +109,7 @@ func (t *CronTool) Parameters() map[string]any {
 			},
 			"message": map[string]any{
 				"type":        "string",
-				"description": "定时触发时要发送的消息内容（创建时必填）",
+				"description": "任务内容，比如总结文档,查询天气",
 			},
 			"enabled": map[string]any{
 				"type":        "boolean",
@@ -184,6 +196,19 @@ func (t *CronTool) handleCreate(ctx context.Context, agentID string, params map[
 		Enabled:        types.CronJobStatus(enabled),
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
+	}
+
+	// 从上下文获取会话推送信息
+	if sessionInfo, ok := ctx.Value(SessionInfoKey).(*SessionPushInfo); ok && sessionInfo != nil {
+		job.PushChannel = &sessionInfo.Channel
+		job.PushBotID = &sessionInfo.BotID
+		job.PushUserID = &sessionInfo.UserID
+		if sessionInfo.GroupID != "" {
+			job.PushGroupID = &sessionInfo.GroupID
+		}
+		if sessionInfo.ChatID != "" {
+			job.PushChatID = &sessionInfo.ChatID
+		}
 	}
 
 	if err := t.deps.CronRepo.Create(job); err != nil {

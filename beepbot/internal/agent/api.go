@@ -123,8 +123,8 @@ func NewApiAgentRunner(
 
 // RunWithMessage 使用消息创建会话并运行 AgentLoop
 func (r *ApiAgentRunner) RunWithMessage(ctx context.Context, message channel.InboundMessage) error {
-	// 生成会话 Key
-	sessionKey := r.GetSessionKey(message.Channel, message.GroupID, message.UserID)
+	// 生成会话 Key（使用 ChatID）
+	sessionKey := r.GetSessionKey(message.Channel, message.ChatID, message.UserID)
 
 	// 创建或加载会话
 	sess, err := r.createSession(sessionKey, message.Channel)
@@ -152,6 +152,6 @@ func (r *ApiAgentRunner) createSession(sessionKey string, botID string) (session
 }
 
 // GetSessionKey 生成会话 Key
-func (r *ApiAgentRunner) GetSessionKey(channelID, groupID, userID string) string {
-	return session.GetApiSessionKey(r.agentDef.ID, channelID, groupID, userID)
+func (r *ApiAgentRunner) GetSessionKey(channelID, chatID, userID string) string {
+	return session.GetApiSessionKey(r.agentDef.ID, channelID, chatID, userID)
 }

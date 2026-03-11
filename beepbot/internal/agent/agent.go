@@ -129,6 +129,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 				Channel:          channelName,
 				UserID:           userID,
 				GroupID:          groupID,
+				ChatID:           message.ChatID,
 				Content:          "调用模型失败, 请重试...",
 				MessageType:      channel.TextMessage,
 				InboundMessageID: inboundMsgID,
@@ -155,11 +156,24 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 				Channel:          channelName,
 				UserID:           userID,
 				GroupID:          groupID,
+				ChatID:           message.ChatID,
 				Content:          response.Content,
 				MessageType:      channel.MarkdownMsg,
 				InboundMessageID: inboundMsgID,
 			})
 			break
+		}
+
+		if response.Content != "" {
+			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
+				Channel:          channelName,
+				UserID:           userID,
+				GroupID:          groupID,
+				ChatID:           message.ChatID,
+				Content:          response.Content,
+				MessageType:      channel.MarkdownMsg,
+				InboundMessageID: inboundMsgID,
+			})
 		}
 
 		// 获得不同类型的工具调用
@@ -190,6 +204,17 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 		sess.AppendMessage(assistantMsg)
 
 		slog.Info("executing tools", "count", len(functionCalls))
+
+		// 构建会话推送信息，用于工具执行时传递上下文
+		sessionInfo := &tool.SessionPushInfo{
+			Channel: channelName,
+			BotID:   channelName, // Channel 就是 BotID
+			UserID:  userID,
+			GroupID: groupID,
+			ChatID:  message.ChatID,
+			AgentID: a.agentID,
+		}
+
 		// 执行工具函数
 		for _, tc := range functionCalls {
 			params := make(map[string]any)
@@ -199,7 +224,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 				slog.Error("parse function call arguments error", "tool", tc.Name, "args", tc.Function.Arguments)
 				err = errors.New("invalid arguments")
 			} else {
-				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, channelName, userID, a.agentID)
+				result, err = a.tools.ExecuteWithContext(ctx, tc.Function.Name, params, sessionInfo)
 			}
 
 			if a.onToolUsage != nil {

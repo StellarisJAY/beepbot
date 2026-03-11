@@ -40,9 +40,17 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 	channelName := ctx.Value("channel").(string)
 	userID := ctx.Value("userID").(string)
 	content := params["content"].(string)
+
+	// 尝试获取 ChatID（用于飞书等支持主动推送的渠道）
+	var chatID string
+	if sessionInfo, ok := ctx.Value(SessionInfoKey).(*SessionPushInfo); ok && sessionInfo != nil {
+		chatID = sessionInfo.ChatID
+	}
+
 	t.bus.PublishOutbound(ctx, channel.OutboundMessage{
 		Channel: channelName,
 		UserID:  userID,
+		ChatID:  chatID,
 		Content: content,
 	})
 	return "success", nil

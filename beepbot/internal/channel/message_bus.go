@@ -11,8 +11,9 @@ const (
 
 type InboundMessage struct {
 	Channel    string
-	UserID     string
-	GroupID    string
+	UserID     string // 发送者ID（QQ用户ID / 飞书 open_id）
+	GroupID    string // 群聊ID（仅群聊时有值，用于@回复等场景）
+	ChatID     string // 会话ID（飞书 chat_id，用于主动推送）
 	MessageID  string
 	SessionKey string
 	Content    string
@@ -21,8 +22,9 @@ type InboundMessage struct {
 
 type OutboundMessage struct {
 	Channel          string
-	UserID           string
-	GroupID          string
+	UserID           string // 目标用户ID
+	GroupID          string // 目标群ID（群聊时）
+	ChatID           string // 会话ID（飞书主动推送时使用）
 	Content          string
 	File             string
 	InboundMessageID string

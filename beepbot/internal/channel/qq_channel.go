@@ -180,3 +180,9 @@ func (c *QQBotChannel) IsAllowed(senderID string) bool {
 func (c *QQBotChannel) IsAvailable() bool {
 	return c.BaseChannel.IsAvailable()
 }
+
+// CanPushProactively 返回是否支持主动推送
+// QQ 机器人不支持主动推送，需要被动回复的 MessageID
+func (c *QQBotChannel) CanPushProactively() bool {
+	return false
+}
