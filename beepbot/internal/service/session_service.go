@@ -38,10 +38,10 @@ func NewSessionService(sessionRepo repository.SessionRepository, botRepo reposit
 	}
 }
 
-// GetSessionsByAgent 获取智能体的会话列表
-func (s *SessionService) GetSessionsByAgent(agentID string, page, pageSize int) ([]SessionListItem, int64, error) {
+// GetSessionsByAgent 获取智能体的会话列表（支持筛选）
+func (s *SessionService) GetSessionsByAgent(agentID string, page, pageSize int, query *types.SessionQuery) ([]SessionListItem, int64, error) {
 	// 1. 查询会话列表
-	sessions, total, err := s.sessionRepo.GetSessionsByAgentID(agentID, page, pageSize)
+	sessions, total, err := s.sessionRepo.GetSessionsByAgentID(agentID, page, pageSize, query)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -30,7 +30,13 @@ func (h *AgentHandler) ListAgents(c *gin.Context) {
 		pageSize = 10
 	}
 
-	agents, total, err := h.service.ListAgents(page, pageSize)
+	// 构建查询参数
+	query := &types.AgentQuery{
+		Name:   c.Query("name"),
+		Status: types.AgentStatus(c.Query("status")),
+	}
+
+	agents, total, err := h.service.ListAgents(page, pageSize, query)
 	if err != nil {
 		InternalError(c, "failed to list agents: "+err.Error())
 		return

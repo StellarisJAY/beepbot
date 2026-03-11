@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import { Card, Table, Tag, Empty, Button, InputNumber, type TableProps } from 'ant-design-vue'
-import { ReloadOutlined, CompressOutlined } from '@ant-design/icons-vue'
-import { sessionApi } from '@/api/session'
+import { Card, Table, Tag, Empty, Button, InputNumber, Select, type TableProps } from 'ant-design-vue'
+import { ReloadOutlined, CompressOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { sessionApi, type SessionFilter } from '@/api/session'
 import type { SessionListItem } from '@/types/session'
+import { SessionTypeOptions } from '@/types/session'
+import { BotPlatformOptions } from '@/types/bot'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +20,12 @@ const pagination = ref({
   current: 1,
   pageSize: 10,
   total: 0,
+})
+
+// 筛选条件
+const filters = ref<SessionFilter>({
+  session_type: undefined,
+  platform: undefined,
 })
 
 // 表格列定义
@@ -102,10 +110,16 @@ const getSessionTypeLabel = (type: string): string => {
 const fetchSessions = async () => {
   loading.value = true
   try {
+    // 构建筛选参数，过滤掉空值
+    const filterParams: SessionFilter = {}
+    if (filters.value.session_type) filterParams.session_type = filters.value.session_type
+    if (filters.value.platform) filterParams.platform = filters.value.platform
+
     const res = await sessionApi.getAgentSessions(
       agentId,
       pagination.value.current,
       pagination.value.pageSize,
+      filterParams,
     )
     sessions.value = res.data
     pagination.value.total = res.total
@@ -115,6 +129,19 @@ const fetchSessions = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 搜索
+const handleSearch = () => {
+  pagination.value.current = 1
+  fetchSessions()
+}
+
+// 重置筛选
+const handleReset = () => {
+  filters.value = { session_type: undefined, platform: undefined }
+  pagination.value.current = 1
+  fetchSessions()
 }
 
 // 分页变化
@@ -179,6 +206,31 @@ onMounted(() => {
         </Button>
       </template>
 
+      <!-- 筛选栏 -->
+      <div class="filter-bar">
+        <Select
+          v-model:value="filters.session_type"
+          placeholder="会话类型"
+          style="width: 140px"
+          allow-clear
+          :options="SessionTypeOptions"
+        />
+        <Select
+          v-model:value="filters.platform"
+          placeholder="平台"
+          style="width: 120px"
+          allow-clear
+          :options="BotPlatformOptions"
+        />
+        <Button type="primary" @click="handleSearch">
+          <template #icon><SearchOutlined /></template>
+          查询
+        </Button>
+        <Button @click="handleReset">
+          重置
+        </Button>
+      </div>
+
       <Table
         :columns="columns"
         :data-source="sessions"
@@ -238,5 +290,15 @@ onMounted(() => {
 <style scoped>
 .agent-logs {
   padding: 0;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 </style>

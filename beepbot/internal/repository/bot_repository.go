@@ -9,6 +9,9 @@ import (
 type BotRepository interface {
 	Repository[types.Bot]
 
+	// ListWithQuery 带筛选条件的分页查询
+	ListWithQuery(page, pageSize int, query *types.BotQuery) ([]types.Bot, int64, error)
+
 	// GetByName 根据名称获取 Bot
 	GetByName(name string) (*types.Bot, error)
 
@@ -44,6 +47,40 @@ func NewBotRepository(db *gorm.DB) BotRepository {
 		BaseRepository: NewBaseRepository[types.Bot](db),
 		db:             db,
 	}
+}
+
+// ListWithQuery 带筛选条件的分页查询
+func (r *botRepository) ListWithQuery(page, pageSize int, query *types.BotQuery) ([]types.Bot, int64, error) {
+	var bots []types.Bot
+	var total int64
+
+	db := r.db.Model(&types.Bot{})
+
+	// 动态拼接筛选条件
+	if query != nil {
+		if query.Name != "" {
+			db = db.Where("name LIKE ?", "%"+query.Name+"%")
+		}
+		if query.Status != "" {
+			db = db.Where("status = ?", query.Status)
+		}
+		if query.Platform != "" {
+			db = db.Where("platform = ?", query.Platform)
+		}
+	}
+
+	// 统计总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	if err := db.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&bots).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return bots, total, nil
 }
 
 func (r *botRepository) GetByName(name string) (*types.Bot, error) {

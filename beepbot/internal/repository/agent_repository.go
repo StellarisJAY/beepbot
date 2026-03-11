@@ -12,6 +12,9 @@ import (
 type AgentRepository interface {
 	Repository[types.Agent]
 
+	// ListWithQuery 带筛选条件的分页查询
+	ListWithQuery(page, pageSize int, query *types.AgentQuery) ([]types.Agent, int64, error)
+
 	// GetByName 根据名称获取智能体
 	GetByName(name string) (*types.Agent, error)
 
@@ -47,6 +50,37 @@ func NewAgentRepository(db *gorm.DB) AgentRepository {
 		BaseRepository: NewBaseRepository[types.Agent](db),
 		db:             db,
 	}
+}
+
+// ListWithQuery 带筛选条件的分页查询
+func (r *agentRepository) ListWithQuery(page, pageSize int, query *types.AgentQuery) ([]types.Agent, int64, error) {
+	var agents []types.Agent
+	var total int64
+
+	db := r.db.Model(&types.Agent{})
+
+	// 动态拼接筛选条件
+	if query != nil {
+		if query.Name != "" {
+			db = db.Where("name LIKE ?", "%"+query.Name+"%")
+		}
+		if query.Status != "" {
+			db = db.Where("status = ?", query.Status)
+		}
+	}
+
+	// 统计总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	if err := db.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&agents).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return agents, total, nil
 }
 
 func (r *agentRepository) GetByName(name string) (*types.Agent, error) {

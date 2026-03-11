@@ -36,6 +36,12 @@ type Agent struct {
 	UpdatedAt    time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
+// AgentQuery 智能体查询参数
+type AgentQuery struct {
+	Name   string      // 名称模糊搜索
+	Status AgentStatus // 状态筛选
+}
+
 // TableName 指定表名
 func (Agent) TableName() string {
 	return "agents"

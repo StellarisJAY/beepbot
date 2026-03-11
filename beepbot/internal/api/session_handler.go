@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/StellarisJAY/beepbot/internal/service"
+	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,8 +38,14 @@ func (h *SessionHandler) GetAgentSessions(c *gin.Context) {
 		pageSize = 10
 	}
 
+	// 构建查询参数
+	query := &types.SessionQuery{
+		SessionType: types.SessionType(c.Query("session_type")),
+		Platform:    types.BotPlatform(c.Query("platform")),
+	}
+
 	// 查询会话列表
-	items, total, err := h.service.GetSessionsByAgent(agentID, page, pageSize)
+	items, total, err := h.service.GetSessionsByAgent(agentID, page, pageSize, query)
 	if err != nil {
 		InternalError(c, "failed to get sessions: "+err.Error())
 		return

@@ -23,8 +23,8 @@ type SessionRepository interface {
 	UpdateSessionContextTokens(sessionID string, tokens int64) error
 	DeleteSession(id string) error
 
-	// GetSessionsByAgentID 根据智能体ID分页查询会话列表
-	GetSessionsByAgentID(agentID string, page, pageSize int) ([]types.Session, int64, error)
+	// GetSessionsByAgentID 根据智能体ID分页查询会话列表（支持筛选）
+	GetSessionsByAgentID(agentID string, page, pageSize int, query *types.SessionQuery) ([]types.Session, int64, error)
 
 	// GetSessionStats 批量获取会话统计信息（消息数量和token用量）
 	GetSessionStats(sessionIDs []string) (map[string]SessionStats, error)
@@ -100,21 +100,35 @@ func (r *SessionRepositoryImpl) UpdateSessionContextTokens(sessionID string, tok
 	return r.db.Model(&types.Session{}).Where("id = ?", sessionID).Update("last_context_tokens", tokens).Error
 }
 
-// GetSessionsByAgentID 根据智能体ID分页查询会话列表
-func (r *SessionRepositoryImpl) GetSessionsByAgentID(agentID string, page, pageSize int) ([]types.Session, int64, error) {
+// GetSessionsByAgentID 根据智能体ID分页查询会话列表（支持筛选）
+func (r *SessionRepositoryImpl) GetSessionsByAgentID(agentID string, page, pageSize int, query *types.SessionQuery) ([]types.Session, int64, error) {
 	var sessions []types.Session
 	var total int64
 
 	offset := (page - 1) * pageSize
 
+	// 基础查询
+	db := r.db.Model(&types.Session{}).Where("sessions.agent_id = ?", agentID)
+
+	// 动态拼接筛选条件
+	if query != nil {
+		// 会话类型筛选
+		if query.SessionType != "" {
+			db = db.Where("sessions.session_type = ?", query.SessionType)
+		}
+		// 平台筛选（需要 JOIN bots 表）
+		if query.Platform != "" {
+			db = db.Joins("JOIN bots ON bots.id = sessions.bot_id").Where("bots.platform = ?", query.Platform)
+		}
+	}
+
 	// 统计总数
-	if err := r.db.Model(&types.Session{}).Where("agent_id = ?", agentID).Count(&total).Error; err != nil {
+	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	// 分页查询，按更新时间倒序
-	err := r.db.Where("agent_id = ?", agentID).
-		Order("updated_at DESC").
+	err := db.Order("sessions.updated_at DESC").
 		Offset(offset).
 		Limit(pageSize).
 		Find(&sessions).Error

@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/StellarisJAY/beepbot/internal/service"
+	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,7 +31,18 @@ func (h *CronHandler) ListCronJobs(c *gin.Context) {
 		pageSize = 10
 	}
 
-	jobs, total, err := h.service.ListCronJobs(page, pageSize)
+	// 构建查询参数
+	query := &types.CronQuery{
+		Name: c.Query("name"),
+	}
+
+	// 解析 enabled 参数
+	if enabledStr := c.Query("enabled"); enabledStr != "" {
+		enabled := enabledStr == "true"
+		query.Enabled = &enabled
+	}
+
+	jobs, total, err := h.service.ListCronJobs(page, pageSize, query)
 	if err != nil {
 		InternalError(c, "failed to list cron jobs: "+err.Error())
 		return

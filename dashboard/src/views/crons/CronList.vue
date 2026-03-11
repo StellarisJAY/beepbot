@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { PlusOutlined, EditOutlined, DeleteOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
-import { cronApi } from '@/api/cron'
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ClockCircleOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons-vue'
+import { cronApi, type CronFilter } from '@/api/cron'
 import { agentApi } from '@/api/agent'
 import type { CronJob } from '@/types/cron'
+import { CronJobStatusOptions } from '@/types/cron'
 import type { Agent } from '@/types/agent'
 
 // 快捷 Cron 表达式选项（6字段格式：秒 分 时 日 月 周）
@@ -31,6 +39,12 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(10)
 
+// 筛选条件
+const filters = ref<CronFilter>({
+  name: '',
+  enabled: undefined,
+})
+
 // 弹窗
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -50,7 +64,12 @@ const formData = ref({
 const fetchCronJobs = async () => {
   loading.value = true
   try {
-    const res = await cronApi.list(page.value, size.value)
+    // 构建筛选参数，过滤掉空值
+    const filterParams: CronFilter = {}
+    if (filters.value.name) filterParams.name = filters.value.name
+    if (filters.value.enabled !== undefined) filterParams.enabled = filters.value.enabled
+
+    const res = await cronApi.list(page.value, size.value, filterParams)
     cronJobs.value = res.data
     total.value = res.total
   } catch (error: unknown) {
@@ -59,6 +78,19 @@ const fetchCronJobs = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 搜索
+const handleSearch = () => {
+  page.value = 1
+  fetchCronJobs()
+}
+
+// 重置筛选
+const handleReset = () => {
+  filters.value = { name: '', enabled: undefined }
+  page.value = 1
+  fetchCronJobs()
 }
 
 // 获取智能体列表（用于下拉选择）
@@ -213,6 +245,34 @@ onMounted(() => {
       </a-button>
     </div>
 
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <a-input
+        v-model:value="filters.name"
+        placeholder="搜索名称"
+        style="width: 200px"
+        allow-clear
+        @pressEnter="handleSearch"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <a-select
+        v-model:value="filters.enabled"
+        placeholder="状态"
+        style="width: 120px"
+        allow-clear
+        :options="CronJobStatusOptions"
+      />
+      <a-button type="primary" @click="handleSearch">
+        <template #icon><SearchOutlined /></template>
+        查询
+      </a-button>
+      <a-button @click="handleReset">
+        <template #icon><ReloadOutlined /></template>
+        重置
+      </a-button>
+    </div>
+
     <a-spin :spinning="loading">
       <div class="card-grid" v-if="cronJobs.length > 0">
         <a-card v-for="job in cronJobs" :key="job.id" class="cron-card" hoverable>
@@ -348,6 +408,16 @@ onMounted(() => {
   margin: 0;
   font-size: 24px;
   font-weight: 600;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 .card-grid {

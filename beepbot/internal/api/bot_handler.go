@@ -30,7 +30,14 @@ func (h *BotHandler) ListBots(c *gin.Context) {
 		pageSize = 10
 	}
 
-	bots, total, err := h.service.ListBots(page, pageSize)
+	// 构建查询参数
+	query := &types.BotQuery{
+		Name:     c.Query("name"),
+		Status:   types.BotStatus(c.Query("status")),
+		Platform: types.BotPlatform(c.Query("platform")),
+	}
+
+	bots, total, err := h.service.ListBots(page, pageSize, query)
 	if err != nil {
 		InternalError(c, "failed to list bots: "+err.Error())
 		return

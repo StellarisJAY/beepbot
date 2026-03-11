@@ -227,9 +227,9 @@ func (s *BotService) GetBotWithRelations(id string) (*BotResponse, error) {
 	return s.toResponseWithRelations(bot), nil
 }
 
-// ListBots 列出机器人
-func (s *BotService) ListBots(page, pageSize int) ([]BotResponse, int64, error) {
-	bots, total, err := s.repo.List(page, pageSize)
+// ListBots 列出机器人（支持筛选）
+func (s *BotService) ListBots(page, pageSize int, query *types.BotQuery) ([]BotResponse, int64, error) {
+	bots, total, err := s.repo.ListWithQuery(page, pageSize, query)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -212,9 +212,9 @@ func (s *CronService) GetCronJobWithAgent(id string) (*CronJobResponse, error) {
 	return response, nil
 }
 
-// ListCronJobs 获取定时任务列表
-func (s *CronService) ListCronJobs(page, pageSize int) ([]CronJobResponse, int64, error) {
-	jobs, total, err := s.repo.List(page, pageSize)
+// ListCronJobs 获取定时任务列表（支持筛选）
+func (s *CronService) ListCronJobs(page, pageSize int, query *types.CronQuery) ([]CronJobResponse, int64, error) {
+	jobs, total, err := s.repo.ListWithQuery(page, pageSize, query)
 	if err != nil {
 		return nil, 0, err
 	}

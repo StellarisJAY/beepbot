@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { PlusOutlined, EditOutlined, DeleteOutlined, MessageOutlined, LinkOutlined } from '@ant-design/icons-vue'
-import { botApi } from '@/api/bot'
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  MessageOutlined,
+  LinkOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons-vue'
+import { botApi, type BotFilter } from '@/api/bot'
 import { agentApi } from '@/api/agent'
 import type { Bot, CreateBotRequest, UpdateBotRequest, BindAgentRequest } from '@/types/bot'
-import { BotStatus, BotStatusLabels, BotPlatformLabels } from '@/types/bot'
+import { BotStatus, BotStatusLabels, BotPlatformLabels, BotStatusOptions, BotPlatformOptions } from '@/types/bot'
 import type { Agent } from '@/types/agent'
 import BotFormModal from '@/components/BotFormModal.vue'
 
@@ -16,6 +24,13 @@ const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
 const size = ref(10)
+
+// 筛选条件
+const filters = ref<BotFilter>({
+  name: '',
+  status: undefined,
+  platform: undefined,
+})
 
 // 弹窗相关
 const formModalVisible = ref(false)
@@ -28,7 +43,13 @@ const bindingBotId = ref<string | null>(null)
 const fetchBots = async () => {
   loading.value = true
   try {
-    const res = await botApi.list(page.value, size.value)
+    // 构建筛选参数，过滤掉空值
+    const filterParams: BotFilter = {}
+    if (filters.value.name) filterParams.name = filters.value.name
+    if (filters.value.status) filterParams.status = filters.value.status
+    if (filters.value.platform) filterParams.platform = filters.value.platform
+
+    const res = await botApi.list(page.value, size.value, filterParams)
     bots.value = res.data
     total.value = res.total
   } catch (error: unknown) {
@@ -37,6 +58,19 @@ const fetchBots = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 搜索
+const handleSearch = () => {
+  page.value = 1
+  fetchBots()
+}
+
+// 重置筛选
+const handleReset = () => {
+  filters.value = { name: '', status: undefined, platform: undefined }
+  page.value = 1
+  fetchBots()
 }
 
 // 获取智能体列表（用于绑定）
@@ -139,6 +173,41 @@ onMounted(() => {
       <a-button type="primary" @click="handleCreate">
         <template #icon><PlusOutlined /></template>
         新建机器人
+      </a-button>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <a-input
+        v-model:value="filters.name"
+        placeholder="搜索名称"
+        style="width: 200px"
+        allow-clear
+        @pressEnter="handleSearch"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <a-select
+        v-model:value="filters.status"
+        placeholder="状态"
+        style="width: 120px"
+        allow-clear
+        :options="BotStatusOptions"
+      />
+      <a-select
+        v-model:value="filters.platform"
+        placeholder="平台"
+        style="width: 120px"
+        allow-clear
+        :options="BotPlatformOptions"
+      />
+      <a-button type="primary" @click="handleSearch">
+        <template #icon><SearchOutlined /></template>
+        查询
+      </a-button>
+      <a-button @click="handleReset">
+        <template #icon><ReloadOutlined /></template>
+        重置
       </a-button>
     </div>
 
@@ -266,6 +335,16 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-color);
   margin: 0;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 .card-grid {

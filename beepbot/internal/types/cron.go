@@ -33,6 +33,12 @@ type CronJob struct {
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
+// CronQuery 定时任务查询参数
+type CronQuery struct {
+	Name    string // 名称模糊搜索
+	Enabled *bool  // 是否启用（使用指针区分空值和 false）
+}
+
 // TableName 指定表名
 func (CronJob) TableName() string {
 	return "cron_jobs"

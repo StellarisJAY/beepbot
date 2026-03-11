@@ -379,9 +379,9 @@ func (s *AgentService) GetAgentByName(name string) (*AgentResponse, error) {
 	return s.toResponse(agent), nil
 }
 
-// ListAgents 列出智能体
-func (s *AgentService) ListAgents(page, pageSize int) ([]AgentResponse, int64, error) {
-	agents, total, err := s.repo.List(page, pageSize)
+// ListAgents 列出智能体（支持筛选）
+func (s *AgentService) ListAgents(page, pageSize int, query *types.AgentQuery) ([]AgentResponse, int64, error) {
+	agents, total, err := s.repo.ListWithQuery(page, pageSize, query)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -40,6 +40,13 @@ type Bot struct {
 	Agent *Agent `json:"agent,omitempty" gorm:"foreignKey:AgentID"`
 }
 
+// BotQuery 机器人查询参数
+type BotQuery struct {
+	Name     string      // 名称模糊搜索
+	Status   BotStatus   // 状态筛选
+	Platform BotPlatform // 平台筛选
+}
+
 // TableName 指定表名
 func (Bot) TableName() string {
 	return "bots"

@@ -1,6 +1,12 @@
 // 会话类型
 export type SessionType = 'chat' | 'cron'
 
+// 会话类型选项（用于下拉选择）
+export const SessionTypeOptions = [
+  { value: 'chat', label: '聊天' },
+  { value: 'cron', label: '定时任务' },
+]
+
 // 会话列表项
 export interface SessionListItem {
   id: string

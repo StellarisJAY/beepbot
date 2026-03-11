@@ -9,10 +9,12 @@ import {
   RobotOutlined,
   FileTextOutlined,
   LineChartOutlined,
+  SearchOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons-vue'
-import { agentApi } from '@/api/agent'
+import { agentApi, type AgentFilter } from '@/api/agent'
 import type { Agent } from '@/types/agent'
-import { AgentStatus } from '@/types/agent'
+import { AgentStatus, AgentStatusOptions } from '@/types/agent'
 import AgentCreateModal from '@/components/AgentCreateModal.vue'
 
 const router = useRouter()
@@ -24,6 +26,12 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(10)
 
+// 筛选条件
+const filters = ref<AgentFilter>({
+  name: '',
+  status: undefined,
+})
+
 // 弹窗
 const createModalVisible = ref(false)
 
@@ -31,7 +39,12 @@ const createModalVisible = ref(false)
 const fetchAgents = async () => {
   loading.value = true
   try {
-    const res = await agentApi.list(page.value, size.value)
+    // 构建筛选参数，过滤掉空值
+    const filterParams: AgentFilter = {}
+    if (filters.value.name) filterParams.name = filters.value.name
+    if (filters.value.status) filterParams.status = filters.value.status
+
+    const res = await agentApi.list(page.value, size.value, filterParams)
     agents.value = res.data
     total.value = res.total
   } catch (error: unknown) {
@@ -40,6 +53,19 @@ const fetchAgents = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 搜索
+const handleSearch = () => {
+  page.value = 1
+  fetchAgents()
+}
+
+// 重置筛选
+const handleReset = () => {
+  filters.value = { name: '', status: undefined }
+  page.value = 1
+  fetchAgents()
 }
 
 // 新建智能体
@@ -138,6 +164,34 @@ onMounted(() => {
       </a-button>
     </div>
 
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <a-input
+        v-model:value="filters.name"
+        placeholder="搜索名称"
+        style="width: 200px"
+        allow-clear
+        @pressEnter="handleSearch"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <a-select
+        v-model:value="filters.status"
+        placeholder="状态"
+        style="width: 120px"
+        allow-clear
+        :options="AgentStatusOptions"
+      />
+      <a-button type="primary" @click="handleSearch">
+        <template #icon><SearchOutlined /></template>
+        查询
+      </a-button>
+      <a-button @click="handleReset">
+        <template #icon><ReloadOutlined /></template>
+        重置
+      </a-button>
+    </div>
+
     <a-spin :spinning="loading">
       <div class="card-grid" v-if="agents.length > 0">
         <a-card v-for="agent in agents" :key="agent.id" class="agent-card" hoverable>
@@ -222,6 +276,16 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-color);
   margin: 0;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 .card-grid {

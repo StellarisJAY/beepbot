@@ -9,6 +9,9 @@ import (
 type CronRepository interface {
 	Repository[types.CronJob]
 
+	// ListWithQuery 带筛选条件的分页查询
+	ListWithQuery(page, pageSize int, query *types.CronQuery) ([]types.CronJob, int64, error)
+
 	// GetByName 根据名称获取定时任务
 	GetByName(name string) (*types.CronJob, error)
 
@@ -30,6 +33,37 @@ func NewCronRepository(db *gorm.DB) CronRepository {
 		BaseRepository: NewBaseRepository[types.CronJob](db),
 		db:             db,
 	}
+}
+
+// ListWithQuery 带筛选条件的分页查询
+func (r *cronRepository) ListWithQuery(page, pageSize int, query *types.CronQuery) ([]types.CronJob, int64, error) {
+	var jobs []types.CronJob
+	var total int64
+
+	db := r.db.Model(&types.CronJob{})
+
+	// 动态拼接筛选条件
+	if query != nil {
+		if query.Name != "" {
+			db = db.Where("name LIKE ?", "%"+query.Name+"%")
+		}
+		if query.Enabled != nil {
+			db = db.Where("enabled = ?", *query.Enabled)
+		}
+	}
+
+	// 统计总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	if err := db.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&jobs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return jobs, total, nil
 }
 
 func (r *cronRepository) GetByName(name string) (*types.CronJob, error) {

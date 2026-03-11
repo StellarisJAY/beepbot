@@ -12,12 +12,23 @@ import type {
 /**
  * 智能体 API 服务
  */
+// Agent 筛选参数
+export interface AgentFilter {
+  name?: string
+  status?: string
+}
+
 export const agentApi = {
   /**
-   * 获取智能体列表（分页）
+   * 获取智能体列表（分页，支持筛选）
    */
-  list(page: number = 1, size: number = 10): Promise<PageResponse<Agent>> {
-    return http.get<Agent[]>('/agents', { params: { page, size } }) as Promise<PageResponse<Agent>>
+  list(page: number = 1, size: number = 10, filters?: AgentFilter): Promise<PageResponse<Agent>> {
+    const params: Record<string, unknown> = { page, size }
+    if (filters) {
+      if (filters.name) params.name = filters.name
+      if (filters.status) params.status = filters.status
+    }
+    return http.get<Agent[]>('/agents', { params }) as Promise<PageResponse<Agent>>
   },
 
   /**

@@ -71,3 +71,9 @@ func (m *SessionMessage) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// SessionQuery 会话查询参数
+type SessionQuery struct {
+	SessionType SessionType // 会话类型筛选
+	Platform    BotPlatform // 平台筛选（需要关联 Bot 表查询）
+}

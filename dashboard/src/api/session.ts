@@ -1,20 +1,32 @@
 import { http, type ApiResponse, type PageResponse } from '@/utils/http'
 import type { SessionListItem, MessagesResponse, CompressSessionRequest, CompressSessionResponse } from '@/types/session'
 
+// Session 筛选参数
+export interface SessionFilter {
+  session_type?: string
+  platform?: string
+}
+
 /**
  * 会话 API 服务
  */
 export const sessionApi = {
   /**
-   * 获取智能体的会话列表
+   * 获取智能体的会话列表（支持筛选）
    */
   getAgentSessions(
     agentId: string,
     page: number = 1,
     size: number = 10,
+    filters?: SessionFilter,
   ): Promise<PageResponse<SessionListItem>> {
+    const params: Record<string, unknown> = { page, size }
+    if (filters) {
+      if (filters.session_type) params.session_type = filters.session_type
+      if (filters.platform) params.platform = filters.platform
+    }
     return http.get<SessionListItem[]>(`/agents/${agentId}/sessions`, {
-      params: { page, size },
+      params,
     }) as Promise<PageResponse<SessionListItem>>
   },
 
