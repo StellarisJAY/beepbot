@@ -624,3 +624,42 @@ func (s *AgentService) UpdateAgentSkills(agentID string, useAllSkills bool, skil
 
 	return nil
 }
+
+// GetUsageStats 获取智能体用量统计
+// period: "1d", "3d", "7d", "14d", "30d"
+func (s *AgentService) GetUsageStats(agentID string, period string) (*types.UsageStatsResponse, error) {
+	var startTime time.Time
+	var groupByHour bool
+	now := time.Now()
+
+	switch period {
+	case "1d":
+		startTime = now.Add(-24 * time.Hour)
+		groupByHour = true
+	case "3d":
+		startTime = now.Add(-3 * 24 * time.Hour)
+		groupByHour = true
+	case "7d":
+		startTime = now.Add(-7 * 24 * time.Hour)
+		groupByHour = false
+	case "14d":
+		startTime = now.Add(-14 * 24 * time.Hour)
+		groupByHour = false
+	case "30d":
+		startTime = now.Add(-30 * 24 * time.Hour)
+		groupByHour = false
+	default:
+		// 默认7天
+		startTime = now.Add(-7 * 24 * time.Hour)
+		groupByHour = false
+	}
+
+	points, err := s.repo.GetUsageStats(agentID, startTime, now, groupByHour)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.UsageStatsResponse{
+		Points: points,
+	}, nil
+}

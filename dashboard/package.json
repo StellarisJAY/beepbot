@@ -18,11 +18,13 @@
     "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.13.6",
+    "echarts": "^6.0.0",
     "highlight.js": "^11.11.1",
     "marked": "^17.0.4",
     "marked-highlight": "^2.2.3",
     "pinia": "^3.0.4",
     "vue": "^3.5.29",
+    "vue-echarts": "^8.0.1",
     "vue-router": "^5.0.3"
   },
   "devDependencies": {

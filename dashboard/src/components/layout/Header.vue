@@ -12,7 +12,7 @@ const sidebarStore = useSidebarStore()
         <MenuUnfoldOutlined v-if="sidebarStore.collapsed" />
         <MenuFoldOutlined v-else />
       </span>
-      <span class="logo">BeepBot</span>
+      <span class="logo"></span>
     </div>
   </a-layout-header>
 </template>

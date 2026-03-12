@@ -69,3 +69,27 @@ export interface CompressSessionResponse {
   success: boolean
   message: string
 }
+
+// 用量统计数据点
+export interface UsageStatsPoint {
+  time: string
+  session_count: number
+  message_count: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+}
+
+// 用量统计响应
+export interface UsageStatsResponse {
+  points: UsageStatsPoint[]
+}
+
+// 时间范围选项
+export const PeriodOptions = [
+  { value: '1d', label: '最近1天' },
+  { value: '3d', label: '最近3天' },
+  { value: '7d', label: '最近7天' },
+  { value: '14d', label: '最近14天' },
+  { value: '30d', label: '最近30天' },
+]

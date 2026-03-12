@@ -72,6 +72,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 			agents.GET("/:id/sessions", sessionHandler.GetAgentSessions)
 			agents.GET("/:id/skills", agentHandler.GetAgentSkills)
 			agents.PUT("/:id/skills", agentHandler.UpdateAgentSkills)
+			agents.GET("/:id/usage", agentHandler.GetAgentUsageStats)
 		}
 
 		// 机器人管理

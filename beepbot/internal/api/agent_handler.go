@@ -237,3 +237,23 @@ func (h *AgentHandler) UpdateAgentSkills(c *gin.Context) {
 
 	Success(c, nil)
 }
+
+// GetAgentUsageStats 获取智能体用量统计
+// GET /api/v1/agents/:id/usage?period=7d
+func (h *AgentHandler) GetAgentUsageStats(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		BadRequest(c, "agent id is required")
+		return
+	}
+
+	period := c.DefaultQuery("period", "7d")
+
+	stats, err := h.service.GetUsageStats(id, period)
+	if err != nil {
+		Error(c, 500, "failed to get usage stats: "+err.Error())
+		return
+	}
+
+	Success(c, stats)
+}

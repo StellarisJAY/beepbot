@@ -50,6 +50,10 @@ type AgentRepository interface {
 
 	// GetCallableAgents 获取所有可作为子智能体调用的智能体
 	GetCallableAgents() ([]types.Agent, error)
+
+	// GetUsageStats 获取智能体在指定时间范围内的用量统计
+	// groupByHour: true 按小时聚合, false 按天聚合
+	GetUsageStats(agentID string, startTime, endTime time.Time, groupByHour bool) ([]types.UsageStatsPoint, error)
 }
 
 type agentRepository struct {
@@ -227,4 +231,98 @@ func (r *agentRepository) GetCallableAgents() ([]types.Agent, error) {
 	var agents []types.Agent
 	err := r.db.Where("callable = ?", true).Find(&agents).Error
 	return agents, err
+}
+
+// GetUsageStats 获取智能体在指定时间范围内的用量统计
+func (r *agentRepository) GetUsageStats(agentID string, startTime, endTime time.Time, groupByHour bool) ([]types.UsageStatsPoint, error) {
+	// 确定时间截断粒度
+	truncUnit := "day"
+	if groupByHour {
+		truncUnit = "hour"
+	}
+
+	// 查询会话统计
+	sessionStats := make(map[time.Time]int64)
+	sessionRows, err := r.db.Table("sessions").
+		Select("date_trunc(?, created_at) as time_bucket, count(*) as count", truncUnit).
+		Where("agent_id = ? AND created_at >= ? AND created_at < ?", agentID, startTime, endTime).
+		Group("time_bucket").
+		Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer sessionRows.Close()
+
+	for sessionRows.Next() {
+		var timeBucket time.Time
+		var count int64
+		if err := sessionRows.Scan(&timeBucket, &count); err != nil {
+			return nil, err
+		}
+		sessionStats[timeBucket] = count
+	}
+
+	// 查询消息和 token 统计
+	type messageStatRow struct {
+		TimeBucket   time.Time
+		MessageCount int64
+		InputTokens  int64
+		OutputTokens int64
+		TotalTokens  int64
+	}
+	messageStats := make(map[time.Time]*messageStatRow)
+
+	messageRows, err := r.db.Table("session_messages sm").
+		Select("date_trunc(?, sm.created_at) as time_bucket, count(*) as message_count, coalesce(sum(sm.input_tokens), 0) as input_tokens, coalesce(sum(sm.output_tokens), 0) as output_tokens, coalesce(sum(sm.total_tokens), 0) as total_tokens", truncUnit).
+		Joins("JOIN sessions s ON s.id = sm.session_id").
+		Where("s.agent_id = ? AND sm.created_at >= ? AND sm.created_at < ?", agentID, startTime, endTime).
+		Group("time_bucket").
+		Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer messageRows.Close()
+
+	for messageRows.Next() {
+		var row messageStatRow
+		if err := messageRows.Scan(&row.TimeBucket, &row.MessageCount, &row.InputTokens, &row.OutputTokens, &row.TotalTokens); err != nil {
+			return nil, err
+		}
+		messageStats[row.TimeBucket] = &row
+	}
+
+	// 生成完整的时间序列
+	var points []types.UsageStatsPoint
+	current := startTime
+	for current.Before(endTime) {
+		var bucket time.Time
+		if groupByHour {
+			bucket = time.Date(current.Year(), current.Month(), current.Day(), current.Hour(), 0, 0, 0, current.Location())
+		} else {
+			bucket = time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, current.Location())
+		}
+
+		point := types.UsageStatsPoint{
+			Time:         bucket,
+			SessionCount: sessionStats[bucket],
+		}
+
+		if msgStat, ok := messageStats[bucket]; ok {
+			point.MessageCount = msgStat.MessageCount
+			point.InputTokens = msgStat.InputTokens
+			point.OutputTokens = msgStat.OutputTokens
+			point.TotalTokens = msgStat.TotalTokens
+		}
+
+		points = append(points, point)
+
+		// 前进到下一个时间点
+		if groupByHour {
+			current = current.Add(time.Hour)
+		} else {
+			current = current.AddDate(0, 0, 1)
+		}
+	}
+
+	return points, nil
 }

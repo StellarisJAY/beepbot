@@ -1,5 +1,11 @@
 import { http, type ApiResponse, type PageResponse } from '@/utils/http'
-import type { SessionListItem, MessagesResponse, CompressSessionRequest, CompressSessionResponse } from '@/types/session'
+import type {
+  SessionListItem,
+  MessagesResponse,
+  CompressSessionRequest,
+  CompressSessionResponse,
+  UsageStatsResponse,
+} from '@/types/session'
 
 // Session 筛选参数
 export interface SessionFilter {
@@ -64,6 +70,18 @@ export const sessionApi = {
       `/sessions/${sessionId}/compress`,
       request || {},
     )
+    return response.data
+  },
+
+  /**
+   * 获取智能体用量统计
+   * @param agentId 智能体ID
+   * @param period 时间范围: 1d, 3d, 7d, 14d, 30d
+   */
+  async getAgentUsageStats(agentId: string, period: string = '7d'): Promise<UsageStatsResponse> {
+    const response = await http.get<UsageStatsResponse>(`/agents/${agentId}/usage`, {
+      params: { period },
+    })
     return response.data
   },
 }
