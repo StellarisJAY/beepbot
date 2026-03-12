@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { useSidebarStore } from '@/stores/sidebar'
-import { useThemeStore } from '@/stores/theme'
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons-vue'
 
 const sidebarStore = useSidebarStore()
-const themeStore = useThemeStore()
 </script>
 
 <template>
@@ -15,16 +13,6 @@ const themeStore = useThemeStore()
         <MenuFoldOutlined v-else />
       </span>
       <span class="logo">BeepBot</span>
-    </div>
-    <div class="header-right">
-      <a-tooltip :title="themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'">
-        <a-switch
-          :checked="themeStore.isDark"
-          @change="themeStore.toggleTheme"
-          checked-children="🌙"
-          un-checked-children="☀️"
-        />
-      </a-tooltip>
     </div>
   </a-layout-header>
 </template>
@@ -68,11 +56,5 @@ const themeStore = useThemeStore()
   font-size: 20px;
   font-weight: 600;
   color: var(--text-color);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
 }
 </style>

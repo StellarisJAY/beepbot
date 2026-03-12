@@ -147,7 +147,7 @@ func (a *AgentManager) startAgentLoop(ctx context.Context, agentDef *types.Agent
 		return
 	}
 	providerDef.APIKey, _ = a.encryptor.Decrypt(providerDef.APIKey)
-	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo)
+	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo, a.providerRepo, a.encryptor)
 	if err != nil {
 		slog.Error("create agent runner error", "err", err)
 		return

@@ -6,6 +6,7 @@ import (
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
+	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/provider"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/session"
@@ -15,6 +16,8 @@ import (
 )
 
 // NewApiRunner 创建API模式的智能体运行器
+// allowSubAgents: 是否注册 Sub-Agent 工具（父智能体为 true，子智能体为 false 防止递归）
+// parentWorkingDir: 父智能体的工作目录，子智能体继承此目录；为空时使用智能体自己的工作目录
 func NewApiRunner(
 	agentDef *types.Agent,
 	providerDef *types.Provider,
@@ -23,6 +26,10 @@ func NewApiRunner(
 	cronDeps *tool.CronToolDeps,
 	skillRepo repository.SkillRepository,
 	agentRepo repository.AgentRepository,
+	providerRepo repository.ProviderRepository,
+	encryptor *crypto.Encryptor,
+	allowSubAgents bool,
+	parentWorkingDir string,
 ) (*AgentRunner, error) {
 	// 创建聊天模型接口
 	llmProvider, err := provider.CreateLLMProviderFromApi(providerDef, agentDef.Model)
@@ -33,19 +40,91 @@ func NewApiRunner(
 	// 注册工具
 	toolRegistry := tool.NewToolRegistry()
 	// 文件系统工具需要传入工作目录，实现访问隔离
+	// 子智能体继承父智能体的工作目录
 	workingDir := agentDef.WorkingDir
-	toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
-	toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
-	toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
-	toolRegistry.Register(tool.NewEditFileTool(workingDir, config.DataDir))
-	// 待办管理工具
-	toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
-	// Shell工具
-	// TODO 沙箱环境
-	toolRegistry.Register(tool.NewShellToolFromApi(workingDir))
-	// 定时任务工具（仅在API模式下注册）
-	if cronDeps != nil {
-		toolRegistry.Register(tool.NewCronTool(cronDeps))
+	if parentWorkingDir != "" {
+		workingDir = parentWorkingDir
+	}
+
+	// 根据配置决定注册哪些工具
+	if agentDef.UseAllTools {
+		// 注册所有工具（默认行为）
+		toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
+		toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
+		toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
+		toolRegistry.Register(tool.NewEditFileTool(workingDir, config.DataDir))
+		// 待办管理工具
+		toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
+		// Shell工具
+		// TODO 沙箱环境
+		toolRegistry.Register(tool.NewShellToolFromApi(workingDir))
+		// 定时任务工具（仅在API模式下注册）
+		if cronDeps != nil {
+			toolRegistry.Register(tool.NewCronTool(cronDeps))
+		}
+	} else {
+		// 只注册配置的工具
+		toolNames, err := agentRepo.GetAgentTools(agentDef.ID)
+		if err == nil {
+			for _, name := range toolNames {
+				switch name {
+				case "list_dir":
+					toolRegistry.Register(tool.NewListDirTool(workingDir, config.DataDir))
+				case "read_file":
+					toolRegistry.Register(tool.NewReadFileTool(workingDir, config.DataDir))
+				case "write_file":
+					toolRegistry.Register(tool.NewWriteFileTool(workingDir, config.DataDir))
+				case "edit_file":
+					toolRegistry.Register(tool.NewEditFileTool(workingDir, config.DataDir))
+				case "todo_write":
+					toolRegistry.Register(tool.NewWriteTodoTool(workingDir))
+				case "shell":
+					toolRegistry.Register(tool.NewShellToolFromApi(workingDir))
+				case "cron":
+					if cronDeps != nil {
+						toolRegistry.Register(tool.NewCronTool(cronDeps))
+					}
+				}
+			}
+		}
+	}
+
+	// 注册 Sub-Agent 工具（仅当 allowSubAgents 为 true 时）
+	if allowSubAgents && agentRepo != nil && providerRepo != nil && encryptor != nil {
+		// 创建子智能体执行器
+		executor := NewSubAgentExecutor(config, skillRepo, agentRepo, providerRepo, encryptor, cronDeps, bus)
+
+		callableAgents, err := agentRepo.GetCallableAgents()
+		if err == nil {
+			for _, agent := range callableAgents {
+				// 排除自身
+				if agent.ID == agentDef.ID {
+					continue
+				}
+				// 跳过禁用的智能体
+				if agent.Status != types.AgentStatusActive {
+					continue
+				}
+				// 获取智能体的 Provider 配置
+				prov, err := providerRepo.GetByID(agent.ProviderID)
+				if err != nil {
+					continue
+				}
+				// 解密 API Key
+				prov.APIKey, _ = encryptor.Decrypt(prov.APIKey)
+
+				// 创建 Sub-Agent 工具（使用执行器）
+				// 传入当前工作目录，子智能体将继承此目录
+				subAgentTool := tool.NewSubAgentToolWithExecutor(
+					&agent,
+					prov,
+					agent.CallableDescription,
+					executor,
+					workingDir,
+				)
+				toolRegistry.Register(subAgentTool)
+			}
+		}
 	}
 
 	// 创建技能管理器
@@ -85,8 +164,12 @@ func NewApiAgentRunner(
 	cronDeps *tool.CronToolDeps,
 	skillRepo repository.SkillRepository,
 	agentRepo repository.AgentRepository,
+	providerRepo repository.ProviderRepository,
+	encryptor *crypto.Encryptor,
 ) (*ApiAgentRunner, error) {
-	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps, skillRepo, agentRepo)
+	// allowSubAgents=true，父智能体可以调用子智能体
+	// parentWorkingDir="" 表示父智能体使用自己的工作目录
+	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps, skillRepo, agentRepo, providerRepo, encryptor, true, "")
 	if err != nil {
 		return nil, err
 	}
@@ -132,8 +215,8 @@ func (r *ApiAgentRunner) RunWithMessage(ctx context.Context, message channel.Inb
 		return err
 	}
 
-	// 运行 AgentLoop
-	r.AgentLoop(ctx, sess, message)
+	// 运行 AgentLoop，传递 nil 使用默认的 BusOutputHook
+	r.AgentLoop(ctx, sess, message, nil)
 	return nil
 }
 

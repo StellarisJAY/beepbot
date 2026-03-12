@@ -7,7 +7,7 @@ import { skillApi } from '@/api/skill'
 import type { Agent, AgentDefaults, UpdateAgentRequest, SkillBrief } from '@/types/agent'
 import type { Provider } from '@/types/provider'
 import type { Skill } from '@/types/skill'
-import { AgentStatus } from '@/types/agent'
+import { AgentStatus, AvailableTools } from '@/types/agent'
 
 // 从父组件注入的数据
 const agent = inject<Ref<Agent | null>>('agent')
@@ -92,6 +92,10 @@ const initForm = () => {
       status: agent.value.status,
       use_all_skills: agent.value.use_all_skills,
       skill_ids: agent.value.skills?.map((s: SkillBrief) => s.id) || [],
+      use_all_tools: agent.value.use_all_tools,
+      tool_names: agent.value.tool_names || [],
+      callable: agent.value.callable,
+      callable_description: agent.value.callable_description,
     }
   }
 }
@@ -263,6 +267,66 @@ onMounted(() => {
             show-search
             :filter-option="filterOption"
             style="width: 100%"
+          />
+        </a-form-item>
+
+        <!-- 工具权限配置 -->
+        <a-divider style="margin: 12px 0">工具权限</a-divider>
+
+        <a-form-item label="工具权限">
+          <a-radio-group v-model:value="form.use_all_tools">
+            <a-radio :value="true">使用所有工具</a-radio>
+            <a-radio :value="false">选择特定工具</a-radio>
+          </a-radio-group>
+        </a-form-item>
+
+        <!-- 当选择"选择特定工具"时显示工具选择器 -->
+        <a-form-item v-if="!form.use_all_tools" label="可用工具">
+          <a-select
+            v-model:value="form.tool_names"
+            mode="multiple"
+            placeholder="请选择工具"
+            style="width: 100%"
+          >
+            <a-select-option v-for="t in AvailableTools" :key="t.name" :value="t.name">
+              {{ t.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+
+        <!-- 子智能体配置 -->
+        <a-divider style="margin: 12px 0">子智能体配置</a-divider>
+
+        <a-alert
+          message="子智能体将继承父智能体的工作目录"
+          type="info"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #description>
+            当此智能体作为子智能体被调用时，它会使用父智能体的工作目录而不是自己的配置，以确保文件操作的一致性。
+          </template>
+        </a-alert>
+
+        <a-form-item label="允许被调用">
+          <a-switch
+            v-model:checked="form.callable"
+            checked-children="是"
+            un-checked-children="否"
+          />
+          <span style="margin-left: 8px; color: #999; font-size: 12px">
+            允许其他智能体作为工具调用此智能体
+          </span>
+        </a-form-item>
+
+        <!-- 当允许被调用时显示描述输入框 -->
+        <a-form-item v-if="form.callable" label="工具描述">
+          <a-textarea
+            v-model:value="form.callable_description"
+            placeholder="描述此智能体的功能，供其他智能体理解何时调用它"
+            :rows="3"
+            :maxlength="500"
+            show-count
           />
         </a-form-item>
       </a-form>

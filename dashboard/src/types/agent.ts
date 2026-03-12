@@ -64,6 +64,14 @@ export interface Agent {
   use_all_skills: boolean
   // 关联的技能列表
   skills?: SkillBrief[]
+  // 是否使用所有工具
+  use_all_tools: boolean
+  // 关联的工具名称列表
+  tool_names?: string[]
+  // 是否可作为子智能体被调用
+  callable: boolean
+  // 作为子智能体时的工具描述
+  callable_description: string
   created_at: string
   updated_at: string
 }
@@ -109,6 +117,12 @@ export interface CreateAgentRequest {
   // 技能配置
   use_all_skills?: boolean
   skill_ids?: string[]
+  // 工具配置
+  use_all_tools?: boolean
+  tool_names?: string[]
+  // 子智能体配置
+  callable?: boolean
+  callable_description?: string
 }
 
 /**
@@ -131,6 +145,12 @@ export interface UpdateAgentRequest {
   // 技能配置
   use_all_skills?: boolean
   skill_ids?: string[]
+  // 工具配置
+  use_all_tools?: boolean
+  tool_names?: string[]
+  // 子智能体配置
+  callable?: boolean
+  callable_description?: string
 }
 
 /**
@@ -140,3 +160,16 @@ export interface UpdateAgentSkillsRequest {
   use_all_skills: boolean
   skill_ids?: string[]
 }
+
+/**
+ * 可用工具列表
+ */
+export const AvailableTools = [
+  { name: 'list_dir', label: '列出目录' },
+  { name: 'read_file', label: '读取文件' },
+  { name: 'write_file', label: '写入文件' },
+  { name: 'edit_file', label: '编辑文件' },
+  { name: 'shell', label: '执行命令' },
+  { name: 'todo_write', label: '任务管理' },
+  { name: 'cron', label: '定时任务' },
+] as const

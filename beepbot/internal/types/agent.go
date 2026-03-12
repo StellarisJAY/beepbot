@@ -31,9 +31,17 @@ type Agent struct {
 	// UseAllSkills 是否使用系统所有技能
 	// true: 使用所有技能（默认）
 	// false: 仅使用关联表中的技能
-	UseAllSkills bool      `json:"use_all_skills" gorm:"column:use_all_skills;type:boolean;default:true"`
-	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
-	UpdatedAt    time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
+	UseAllSkills bool `json:"use_all_skills" gorm:"column:use_all_skills;type:boolean;default:true"`
+	// UseAllTools 是否使用所有工具
+	// true: 使用所有工具（默认）
+	// false: 仅使用关联表中的工具
+	UseAllTools bool `json:"use_all_tools" gorm:"column:use_all_tools;type:boolean;default:true"`
+	// Callable 是否可作为子智能体被调用
+	Callable bool `json:"callable" gorm:"column:callable;type:boolean;default:false;index"`
+	// CallableDescription 作为子智能体时的工具描述（供 LLM 理解用途）
+	CallableDescription string    `json:"callable_description" gorm:"column:callable_description;type:text"`
+	CreatedAt           time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt           time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
 // AgentQuery 智能体查询参数

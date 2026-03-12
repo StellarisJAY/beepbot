@@ -80,12 +80,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '技能详情' },
   },
   {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/settings/Settings.vue'),
-    meta: { title: '全局设置' },
-  },
-  {
     path: '/:pathMatch(.*)*',
     redirect: '/agents',
   },

@@ -38,6 +38,18 @@ type AgentRepository interface {
 
 	// DeleteSkillFromAllAgents 从所有智能体中删除指定技能的关联
 	DeleteSkillFromAllAgents(skillID string) error
+
+	// GetAgentTools 获取智能体可用工具名称列表
+	GetAgentTools(agentID string) ([]string, error)
+
+	// SetAgentTools 设置智能体可用工具（替换现有）
+	SetAgentTools(agentID string, toolNames []string) error
+
+	// DeleteAgentTools 删除智能体的所有工具关联
+	DeleteAgentTools(agentID string) error
+
+	// GetCallableAgents 获取所有可作为子智能体调用的智能体
+	GetCallableAgents() ([]types.Agent, error)
 }
 
 type agentRepository struct {
@@ -161,4 +173,58 @@ func (r *agentRepository) DeleteAgentSkills(agentID string) error {
 // DeleteSkillFromAllAgents 从所有智能体中删除指定技能的关联
 func (r *agentRepository) DeleteSkillFromAllAgents(skillID string) error {
 	return r.db.Where("skill_id = ?", skillID).Delete(&types.AgentSkill{}).Error
+}
+
+// GetAgentTools 获取智能体可用工具名称列表
+func (r *agentRepository) GetAgentTools(agentID string) ([]string, error) {
+	var agentTools []types.AgentTool
+	err := r.db.Where("agent_id = ?", agentID).Find(&agentTools).Error
+	if err != nil {
+		return nil, err
+	}
+	toolNames := make([]string, len(agentTools))
+	for i, at := range agentTools {
+		toolNames[i] = at.ToolName
+	}
+	return toolNames, nil
+}
+
+// SetAgentTools 设置智能体可用工具（替换现有）
+func (r *agentRepository) SetAgentTools(agentID string, toolNames []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 删除现有关联
+		if err := tx.Where("agent_id = ?", agentID).Delete(&types.AgentTool{}).Error; err != nil {
+			return err
+		}
+
+		// 创建新关联
+		if len(toolNames) > 0 {
+			now := time.Now()
+			agentTools := make([]types.AgentTool, len(toolNames))
+			for i, toolName := range toolNames {
+				agentTools[i] = types.AgentTool{
+					ID:        uuid.NewString(),
+					AgentID:   agentID,
+					ToolName:  toolName,
+					CreatedAt: now,
+				}
+			}
+			if err := tx.Create(&agentTools).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// DeleteAgentTools 删除智能体的所有工具关联
+func (r *agentRepository) DeleteAgentTools(agentID string) error {
+	return r.db.Where("agent_id = ?", agentID).Delete(&types.AgentTool{}).Error
+}
+
+// GetCallableAgents 获取所有可作为子智能体调用的智能体
+func (r *agentRepository) GetCallableAgents() ([]types.Agent, error) {
+	var agents []types.Agent
+	err := r.db.Where("callable = ?", true).Find(&agents).Error
+	return agents, err
 }

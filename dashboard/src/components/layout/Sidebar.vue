@@ -6,7 +6,6 @@ import {
   RobotOutlined,
   ApiOutlined,
   MessageOutlined,
-  SettingOutlined,
   ClockCircleOutlined,
   BookOutlined,
 } from '@ant-design/icons-vue'
@@ -41,11 +40,6 @@ const menuItems = [
     key: '/skills',
     icon: BookOutlined,
     title: '技能管理',
-  },
-  {
-    key: '/settings',
-    icon: SettingOutlined,
-    title: '全局设置',
   },
 ]
 

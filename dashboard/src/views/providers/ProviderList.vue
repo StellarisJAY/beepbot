@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted, h, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   PlusOutlined,
@@ -44,21 +44,21 @@ const formData = ref<CreateProviderRequest>({
 const formRef = ref()
 
 // 表单校验规则
-const formRules = {
+const formRules = computed(() => ({
   name: [
     { required: true, message: '请输入供应商名称', trigger: 'blur' },
     { min: 2, max: 64, message: '名称长度为 2-64 个字符', trigger: 'blur' },
   ],
   provider_type: [{ required: true, message: '请选择供应商类型', trigger: 'change' }],
   api_key: [
-    { required: true, message: '请输入 API Key', trigger: 'blur' },
+    { required: !isEdit.value, message: '请输入 API Key', trigger: 'blur' },
     { min: 8, message: 'API Key 长度不能少于 8 个字符', trigger: 'blur' },
   ],
   base_url: [
     { required: true, message: '请输入 Base URL', trigger: 'blur' },
     { type: 'url', message: '请输入有效的 URL', trigger: 'blur' },
   ],
-}
+}))
 
 // 获取供应商列表
 const fetchProviders = async () => {

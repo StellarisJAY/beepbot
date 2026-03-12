@@ -44,11 +44,23 @@ type ContextCompressionHook func()
 type ToolUsageHook func(tool types.ToolCall, result string, err error, duration time.Duration)
 type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
 
-func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage) {
+// AgentLoop ReAct智能体循环
+// 需要传入会话、输入消息和输出hook
+// 会话负责历史消息管理
+// 输入消息来源有IM机器人、定时任务和调用sub-agent
+// 输出hook用来处理不同的消息输出逻辑，IM机器人、定时任务、sub-agent的输出逻辑有区别
+func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage, output OutputHook) {
+
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.maxIterations
 
+	// 整个智能体循环的token用量统计
 	totalTokenUsage := types.TokenUsage{}
+
+	// 如果没有提供 output hook，创建一个默认的 BusOutputHook
+	if output == nil {
+		output = NewBusOutputHook(a.bus, channelName, userID, groupID, message.ChatID, inboundMsgID)
+	}
 
 	// 限制一次agent循环的默认最大迭代次数为50
 	if maxIterations == 0 {
@@ -122,15 +134,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 		response, err := a.model.Chat(ctx, messages, a.modelID, options)
 		if err != nil {
 			slog.Error("model api error", "iteration", iterations, "error", err)
-			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-				Channel:          channelName,
-				UserID:           userID,
-				GroupID:          groupID,
-				ChatID:           message.ChatID,
-				Content:          "调用模型失败, 请重试...",
-				MessageType:      channel.TextMessage,
-				InboundMessageID: inboundMsgID,
-			})
+			output.OnError(ctx, err)
 			break
 		}
 
@@ -149,28 +153,12 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 				Content: response.Content,
 				Usage:   tokenUsage,
 			})
-			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-				Channel:          channelName,
-				UserID:           userID,
-				GroupID:          groupID,
-				ChatID:           message.ChatID,
-				Content:          response.Content,
-				MessageType:      channel.MarkdownMsg,
-				InboundMessageID: inboundMsgID,
-			})
+			output.OnResponse(ctx, response.Content)
 			break
 		}
 
 		if response.Content != "" {
-			a.bus.PublishOutbound(ctx, channel.OutboundMessage{
-				Channel:          channelName,
-				UserID:           userID,
-				GroupID:          groupID,
-				ChatID:           message.ChatID,
-				Content:          response.Content,
-				MessageType:      channel.MarkdownMsg,
-				InboundMessageID: inboundMsgID,
-			})
+			output.OnIntermediateContent(ctx, response.Content)
 		}
 
 		// 获得不同类型的工具调用

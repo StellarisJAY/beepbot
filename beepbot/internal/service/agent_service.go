@@ -71,6 +71,14 @@ type CreateAgentRequest struct {
 	UseAllSkills bool `json:"use_all_skills"`
 	// SkillIDs 关联的技能ID列表
 	SkillIDs []string `json:"skill_ids"`
+	// UseAllTools 是否使用所有工具（默认 true）
+	UseAllTools bool `json:"use_all_tools"`
+	// ToolNames 关联的工具名称列表
+	ToolNames []string `json:"tool_names"`
+	// Callable 是否可作为子智能体被调用
+	Callable bool `json:"callable"`
+	// CallableDescription 作为子智能体时的工具描述
+	CallableDescription string `json:"callable_description"`
 }
 
 // GetAgentDefaults 获取智能体默认配置
@@ -125,6 +133,14 @@ type UpdateAgentRequest struct {
 	UseAllSkills *bool `json:"use_all_skills,omitempty"`
 	// SkillIDs 关联的技能ID列表（仅当 use_all_skills 为 false 时有效）
 	SkillIDs []string `json:"skill_ids,omitempty"`
+	// UseAllTools 是否使用所有工具
+	UseAllTools *bool `json:"use_all_tools,omitempty"`
+	// ToolNames 关联的工具名称列表（仅当 use_all_tools 为 false 时有效）
+	ToolNames []string `json:"tool_names,omitempty"`
+	// Callable 是否可作为子智能体被调用
+	Callable *bool `json:"callable,omitempty"`
+	// CallableDescription 作为子智能体时的工具描述
+	CallableDescription string `json:"callable_description,omitempty"`
 }
 
 // SkillBrief 技能简要信息
@@ -154,9 +170,17 @@ type AgentResponse struct {
 	// UseAllSkills 是否使用所有技能
 	UseAllSkills bool `json:"use_all_skills"`
 	// Skills 关联的技能列表（简要信息）
-	Skills    []SkillBrief `json:"skills,omitempty"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	Skills []SkillBrief `json:"skills,omitempty"`
+	// UseAllTools 是否使用所有工具
+	UseAllTools bool `json:"use_all_tools"`
+	// ToolNames 关联的工具名称列表
+	ToolNames []string `json:"tool_names,omitempty"`
+	// Callable 是否可作为子智能体被调用
+	Callable bool `json:"callable"`
+	// CallableDescription 作为子智能体时的工具描述
+	CallableDescription string `json:"callable_description"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // CreateAgent 创建智能体
@@ -231,6 +255,9 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		ContextMaxTokens:    contextMaxTokens,
 		Status:              types.AgentStatusInactive, // 默认禁用，配置完成后启用
 		UseAllSkills:        req.UseAllSkills,          // 默认为 false，前端应传 true
+		UseAllTools:         req.UseAllTools,           // 默认为 true
+		Callable:            req.Callable,
+		CallableDescription: req.CallableDescription,
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
@@ -244,6 +271,13 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		if err := s.repo.SetAgentSkills(agentID, req.SkillIDs); err != nil {
 			// 记录错误但不回滚智能体创建
 			// 可以考虑添加日志
+		}
+	}
+
+	// 如果不使用所有工具且指定了工具列表，创建工具关联
+	if !req.UseAllTools && len(req.ToolNames) > 0 {
+		if err := s.repo.SetAgentTools(agentID, req.ToolNames); err != nil {
+			// 记录错误但不回滚智能体创建
 		}
 	}
 
@@ -323,6 +357,21 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 		agent.UseAllSkills = *req.UseAllSkills
 	}
 
+	// 更新 UseAllTools 字段
+	if req.UseAllTools != nil {
+		agent.UseAllTools = *req.UseAllTools
+	}
+
+	// 更新 Callable 字段
+	if req.Callable != nil {
+		agent.Callable = *req.Callable
+	}
+
+	// 更新 CallableDescription 字段
+	if req.CallableDescription != "" {
+		agent.CallableDescription = req.CallableDescription
+	}
+
 	agent.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(agent); err != nil {
@@ -336,6 +385,13 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 		}
 	}
 
+	// 更新工具关联（仅当 UseAllTools 为 false 且提供了 ToolNames 时）
+	if req.UseAllTools != nil && !*req.UseAllTools && req.ToolNames != nil {
+		if err := s.repo.SetAgentTools(id, req.ToolNames); err != nil {
+			return nil, err
+		}
+	}
+
 	return agent, nil
 }
 
@@ -343,6 +399,10 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 func (s *AgentService) DeleteAgent(id string) error {
 	// 先删除技能关联
 	if err := s.repo.DeleteAgentSkills(id); err != nil {
+		return err
+	}
+	// 删除工具关联
+	if err := s.repo.DeleteAgentTools(id); err != nil {
 		return err
 	}
 	// 再删除智能体
@@ -450,6 +510,9 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 		ContextMaxTokens:    agent.ContextMaxTokens,
 		Status:              agent.Status,
 		UseAllSkills:        agent.UseAllSkills,
+		UseAllTools:         agent.UseAllTools,
+		Callable:            agent.Callable,
+		CallableDescription: agent.CallableDescription,
 		CreatedAt:           agent.CreatedAt,
 		UpdatedAt:           agent.UpdatedAt,
 	}
@@ -471,6 +534,14 @@ func (s *AgentService) toResponseWithRelations(agent *types.Agent) *AgentRespons
 		skills, err := s.getSkillBriefs(agent.ID)
 		if err == nil {
 			response.Skills = skills
+		}
+	}
+
+	// 如果不使用所有工具，查询关联的工具列表
+	if !agent.UseAllTools {
+		toolNames, err := s.repo.GetAgentTools(agent.ID)
+		if err == nil {
+			response.ToolNames = toolNames
 		}
 	}
 
