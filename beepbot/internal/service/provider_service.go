@@ -179,8 +179,8 @@ func (s *ProviderService) GetProviderByName(name string) (*ProviderResponse, err
 }
 
 // ListProviders 列出供应商
-func (s *ProviderService) ListProviders(page, pageSize int) ([]ProviderResponse, int64, error) {
-	providers, total, err := s.repo.List(page, pageSize)
+func (s *ProviderService) ListProviders(page, pageSize int, query *types.ProviderQuery) ([]ProviderResponse, int64, error) {
+	providers, total, err := s.repo.ListWithQuery(page, pageSize, query)
 	if err != nil {
 		return nil, 0, err
 	}

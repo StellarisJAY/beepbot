@@ -35,7 +35,16 @@ func CreateLLMProviderFromApi(provider *types.Provider, model string) (types.LLM
 			baseURL = DashScopeBaseURL
 		}
 		return NewOpenAIProvider(apiKey, baseURL, model), nil
+	case "ollama":
+		slog.Info("Using Ollama provider", "model", model)
+		return NewOllamaProvider(apiKey, baseURL, model), nil
+	case "anthropic":
+		slog.Info("Using Anthropic provider", "model", model)
+		return NewAnthropicProvider(apiKey, baseURL, model), nil
+	case "deepseek":
+		slog.Info("Using DeepSeek provider", "model", model)
+		return NewDeepSeekProvider(apiKey, baseURL, model), nil
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s, available providers: openai, dashscope", providerType)
+		return nil, fmt.Errorf("unsupported provider: %s, available providers: openai, dashscope, ollama, anthropic, deepseek", providerType)
 	}
 }

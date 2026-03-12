@@ -2,9 +2,6 @@
 .idea
 .vscode
 
-# ignore go.sum
-go.sum
-
 # ignore debug files
 logs
 *.db

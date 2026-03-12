@@ -5,25 +5,37 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ApiOutlined,
   StarOutlined,
   StarFilled,
   ExclamationCircleOutlined,
+  SearchOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons-vue'
 import { providerApi } from '@/api/provider'
 import {
   type Provider,
   type CreateProviderRequest,
   type UpdateProviderRequest,
+  type ProviderFilter,
   ProviderType,
   ProviderTypeLabels,
   ProviderTypeOptions,
+  ProviderTypeIcons,
   ProviderDefaultBaseURL,
 } from '@/types/provider'
 
 // 供应商列表
 const providers = ref<Provider[]>([])
 const loading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const size = ref(10)
+
+// 筛选条件
+const filters = ref<ProviderFilter>({
+  name: '',
+  provider_type: undefined,
+})
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -51,8 +63,29 @@ const formRules = computed(() => ({
   ],
   provider_type: [{ required: true, message: '请选择供应商类型', trigger: 'change' }],
   api_key: [
-    { required: !isEdit.value, message: '请输入 API Key', trigger: 'blur' },
-    { min: 8, message: 'API Key 长度不能少于 8 个字符', trigger: 'blur' },
+    {
+      required: !isEdit.value && formData.value.provider_type !== ProviderType.Ollama,
+      message: '请输入 API Key',
+      trigger: 'blur',
+    },
+    {
+      min: 8,
+      message: 'API Key 长度不能少于 8 个字符',
+      trigger: 'blur',
+      validator: (_rule: unknown, value: string) => {
+        // Ollama 不需要 API Key，跳过长度验证
+        if (formData.value.provider_type === ProviderType.Ollama) {
+          return Promise.resolve()
+        }
+        if (isEdit.value && !value) {
+          return Promise.resolve() // 编辑时留空表示不修改
+        }
+        if (value && value.length < 8) {
+          return Promise.reject('API Key 长度不能少于 8 个字符')
+        }
+        return Promise.resolve()
+      },
+    },
   ],
   base_url: [
     { required: true, message: '请输入 Base URL', trigger: 'blur' },
@@ -64,14 +97,33 @@ const formRules = computed(() => ({
 const fetchProviders = async () => {
   loading.value = true
   try {
-    const { data } = await providerApi.list()
-    providers.value = data || []
+    // 构建筛选参数，过滤掉空值
+    const filterParams: ProviderFilter = {}
+    if (filters.value.name) filterParams.name = filters.value.name
+    if (filters.value.provider_type) filterParams.provider_type = filters.value.provider_type
+
+    const res = await providerApi.list(page.value, size.value, filterParams)
+    providers.value = res.data
+    total.value = res.total
   } catch (error: unknown) {
     const err = error as { message?: string }
     message.error(err.message || '获取供应商列表失败')
   } finally {
     loading.value = false
   }
+}
+
+// 搜索
+const handleSearch = () => {
+  page.value = 1
+  fetchProviders()
+}
+
+// 重置筛选
+const handleReset = () => {
+  filters.value = { name: '', provider_type: undefined }
+  page.value = 1
+  fetchProviders()
 }
 
 // 打开创建弹窗
@@ -197,22 +249,65 @@ onMounted(() => {
       </a-button>
     </div>
 
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <a-input
+        v-model:value="filters.name"
+        placeholder="搜索名称"
+        style="width: 200px"
+        allow-clear
+        @pressEnter="handleSearch"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <a-select
+        v-model:value="filters.provider_type"
+        placeholder="供应商类型"
+        style="width: 180px"
+        allow-clear
+      >
+        <a-select-option
+          v-for="option in ProviderTypeOptions"
+          :key="option.value"
+          :value="option.value"
+        >
+          <div class="provider-option">
+            <img :src="option.icon" class="provider-option-icon" :alt="option.value" />
+            <span>{{ option.label }}</span>
+          </div>
+        </a-select-option>
+      </a-select>
+      <a-button type="primary" @click="handleSearch">
+        <template #icon><SearchOutlined /></template>
+        查询
+      </a-button>
+      <a-button @click="handleReset">
+        <template #icon><ReloadOutlined /></template>
+        重置
+      </a-button>
+    </div>
+
     <a-spin :spinning="loading">
       <div class="card-grid">
         <a-card v-for="provider in providers" :key="provider.id" class="provider-card" hoverable>
           <template #title>
             <div class="card-title">
-              <ApiOutlined class="card-icon" />
+              <img
+                :src="ProviderTypeIcons[provider.provider_type as ProviderType]"
+                class="provider-icon"
+                :alt="provider.provider_type"
+              />
               <span>{{ provider.name }}</span>
               <StarFilled v-if="provider.is_default" class="default-star" />
             </div>
           </template>
-          <template #extra>
-            <a-tag :color="provider.is_default ? 'gold' : 'blue'">
-              {{ ProviderTypeLabels[provider.provider_type as ProviderType] }}
-            </a-tag>
-          </template>
           <div class="card-info">
+            <div class="info-item">
+              <span class="info-label">类型:</span>
+              <a-tag :color="provider.is_default ? 'gold' : 'blue'">
+                {{ ProviderTypeLabels[provider.provider_type as ProviderType] }}
+              </a-tag>
+            </div>
             <div class="info-item">
               <span class="info-label">API Key:</span>
               <span class="info-value masked">{{ provider.api_key_masked || '未设置' }}</span>
@@ -242,6 +337,17 @@ onMounted(() => {
       <a-empty v-if="!loading && providers.length === 0" description="暂无供应商，点击上方按钮创建" />
     </a-spin>
 
+    <!-- 分页 -->
+    <div class="pagination-container" v-if="total > size">
+      <a-pagination
+        v-model:current="page"
+        :total="total"
+        :pageSize="size"
+        show-less-items
+        @change="fetchProviders"
+      />
+    </div>
+
     <!-- 创建/编辑弹窗 -->
     <a-modal
       v-model:open="modalVisible"
@@ -263,17 +369,29 @@ onMounted(() => {
         <a-form-item label="供应商类型" name="provider_type">
           <a-select
             v-model:value="formData.provider_type"
-            :options="ProviderTypeOptions"
             :disabled="isEdit"
             placeholder="请选择供应商类型"
             @change="handleProviderTypeChange"
-          />
+          >
+            <a-select-option
+              v-for="option in ProviderTypeOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              <div class="provider-option">
+                <img :src="option.icon" class="provider-option-icon" :alt="option.value" />
+                <span>{{ option.label }}</span>
+              </div>
+            </a-select-option>
+          </a-select>
         </a-form-item>
 
         <a-form-item label="API Key" name="api_key">
           <a-input-password
             v-model:value="formData.api_key"
-            :placeholder="isEdit ? '留空则不修改 API Key' : '请输入 API Key'"
+            :placeholder="formData.provider_type === ProviderType.Ollama
+              ? 'Ollama 不需要 API Key，可留空'
+              : (isEdit ? '留空则不修改 API Key' : '请输入 API Key')"
           />
         </a-form-item>
 
@@ -308,6 +426,16 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-color);
   margin: 0;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 .card-grid {
@@ -349,9 +477,10 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.card-icon {
-  font-size: 18px;
-  color: var(--color-primary);
+.provider-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .default-star {
@@ -398,7 +527,25 @@ onMounted(() => {
   cursor: default;
 }
 
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
 .provider-form {
   margin-top: 16px;
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-option-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 </style>

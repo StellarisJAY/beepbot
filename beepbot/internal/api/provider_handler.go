@@ -30,7 +30,13 @@ func (h *ProviderHandler) ListProviders(c *gin.Context) {
 		pageSize = 10
 	}
 
-	providers, total, err := h.service.ListProviders(page, pageSize)
+	// 构建查询参数
+	query := &types.ProviderQuery{
+		Name:         c.Query("name"),
+		ProviderType: types.ProviderType(c.Query("provider_type")),
+	}
+
+	providers, total, err := h.service.ListProviders(page, pageSize, query)
 	if err != nil {
 		InternalError(c, "failed to list providers: "+err.Error())
 		return
@@ -67,7 +73,9 @@ func (h *ProviderHandler) CreateProvider(c *gin.Context) {
 	}
 
 	// 验证供应商类型
-	if req.ProviderType != types.ProviderTypeOpenAI && req.ProviderType != types.ProviderTypeDashScope {
+	if req.ProviderType != types.ProviderTypeOpenAI && req.ProviderType != types.ProviderTypeDashScope &&
+		req.ProviderType != types.ProviderOllama && req.ProviderType != types.ProviderTypeAnthropic &&
+		req.ProviderType != types.ProviderTypeDeepSeek {
 		BadRequest(c, "invalid provider type, must be 'openai' or 'dashscope'")
 		return
 	}

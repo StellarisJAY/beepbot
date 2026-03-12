@@ -9,6 +9,9 @@ import (
 type ProviderRepository interface {
 	Repository[types.Provider]
 
+	// ListWithQuery 带筛选条件的分页查询
+	ListWithQuery(page, pageSize int, query *types.ProviderQuery) ([]types.Provider, int64, error)
+
 	// GetByName 根据名称获取供应商
 	GetByName(name string) (*types.Provider, error)
 
@@ -32,6 +35,37 @@ func NewProviderRepository(db *gorm.DB) ProviderRepository {
 		BaseRepository: NewBaseRepository[types.Provider](db),
 		db:             db,
 	}
+}
+
+// ListWithQuery 带筛选条件的分页查询
+func (r *providerRepository) ListWithQuery(page, pageSize int, query *types.ProviderQuery) ([]types.Provider, int64, error) {
+	var providers []types.Provider
+	var total int64
+
+	db := r.db.Model(&types.Provider{})
+
+	// 动态拼接筛选条件
+	if query != nil {
+		if query.Name != "" {
+			db = db.Where("name LIKE ?", "%"+query.Name+"%")
+		}
+		if query.ProviderType != "" {
+			db = db.Where("provider_type = ?", query.ProviderType)
+		}
+	}
+
+	// 统计总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	if err := db.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&providers).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return providers, total, nil
 }
 
 func (r *providerRepository) GetByName(name string) (*types.Provider, error) {

@@ -1,15 +1,20 @@
 import { http, type ApiResponse, type PageResponse } from '@/utils/http'
-import type { Provider, CreateProviderRequest, UpdateProviderRequest } from '@/types/provider'
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, ProviderFilter } from '@/types/provider'
 
 /**
  * 供应商 API 服务
  */
 export const providerApi = {
   /**
-   * 获取供应商列表
+   * 获取供应商列表（分页，支持筛选）
    */
-  list(): Promise<ApiResponse<Provider[]>> {
-    return http.get<Provider[]>('/providers')
+  list(page: number = 1, size: number = 10, filters?: ProviderFilter): Promise<PageResponse<Provider>> {
+    const params: Record<string, unknown> = { page, size }
+    if (filters) {
+      if (filters.name) params.name = filters.name
+      if (filters.provider_type) params.provider_type = filters.provider_type
+    }
+    return http.get<Provider[]>('/providers', { params }) as Promise<PageResponse<Provider>>
   },
 
   /**

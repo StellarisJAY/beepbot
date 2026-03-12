@@ -14,6 +14,8 @@ const (
 	ProviderTypeOpenAI    ProviderType = "openai"
 	ProviderTypeDashScope ProviderType = "dashscope"
 	ProviderOllama        ProviderType = "ollama"
+	ProviderTypeAnthropic ProviderType = "anthropic"
+	ProviderTypeDeepSeek  ProviderType = "deepseek"
 )
 
 // Provider 模型供应商配置
@@ -35,11 +37,37 @@ func (Provider) TableName() string {
 	return "providers"
 }
 
+// ProviderQuery 供应商查询参数
+type ProviderQuery struct {
+	Name         string       // 名称模糊搜索
+	ProviderType ProviderType // 类型筛选
+}
+
 const (
 	RoleSystem    string = "system"
 	RoleAssistant string = "assistant"
 	RoleTool      string = "tool"
 	RoleUser      string = "user"
+)
+
+// FinishReason 统一的结束原因类型
+type FinishReason string
+
+const (
+	// FinishReasonStop 正常结束，对话完成
+	FinishReasonStop FinishReason = "stop"
+	// FinishReasonToolCall 工具调用
+	FinishReasonToolCall FinishReason = "tool_call"
+	// FinishReasonMaxTokens 达到最大 token 限制
+	FinishReasonMaxTokens FinishReason = "max_tokens"
+	// FinishReasonContentFilter 内容被过滤（安全审核）
+	FinishReasonContentFilter FinishReason = "content_filter"
+	// FinishReasonStopSequence 遇到停止序列
+	FinishReasonStopSequence FinishReason = "stop_sequence"
+	// FinishReasonError 发生错误
+	FinishReasonError FinishReason = "error"
+	// FinishReasonUnknown 未知原因
+	FinishReasonUnknown FinishReason = "unknown"
 )
 
 type FunctionCall struct {
@@ -48,10 +76,10 @@ type FunctionCall struct {
 }
 
 type LLMResponse struct {
-	Content      string      `json:"content"`
-	ToolCalls    []ToolCall  `json:"tool_calls,omitempty"`
-	FinishReason string      `json:"finish_reason"`
-	Usage        *TokenUsage `json:"usage,omitempty"`
+	Content      string       `json:"content"`
+	ToolCalls    []ToolCall   `json:"tool_calls,omitempty"`
+	FinishReason FinishReason `json:"finish_reason"`
+	Usage        *TokenUsage  `json:"usage,omitempty"`
 }
 
 type TokenUsage struct {

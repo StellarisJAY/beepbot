@@ -56,9 +56,30 @@ func (d *OpenAIProvider) Chat(ctx context.Context, messages []types.Message, mod
 			ID: tc.ID,
 		})
 	}
-	response.FinishReason = result.Choices[0].FinishReason
+	response.FinishReason = convertOpenAIFinishReason(result.Choices[0].FinishReason)
 	response.Content = result.Choices[0].Message.Content
 	return response, nil
+}
+
+// convertOpenAIFinishReason 将 OpenAI 的 finish_reason 转换为统一的 FinishReason
+// OpenAI finish_reason:
+// - stop: 正常结束
+// - tool_calls: 工具调用
+// - length: 达到最大 token
+// - content_filter: 内容被过滤
+func convertOpenAIFinishReason(reason string) types.FinishReason {
+	switch reason {
+	case "stop":
+		return types.FinishReasonStop
+	case "tool_calls":
+		return types.FinishReasonToolCall
+	case "length":
+		return types.FinishReasonMaxTokens
+	case "content_filter":
+		return types.FinishReasonContentFilter
+	default:
+		return types.FinishReasonUnknown
+	}
 }
 
 func buildOpenAICompletionsParams(messages []types.Message, model string, options types.ChatOptions) openai.ChatCompletionNewParams {

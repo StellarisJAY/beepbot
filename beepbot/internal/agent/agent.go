@@ -147,7 +147,7 @@ func (a *AgentRunner) AgentLoop(ctx context.Context, sess session.Session, messa
 		totalTokenUsage.OutputTokens += tokenUsage.OutputTokens
 
 		// 没有工具调用，直接返回消息
-		if response.FinishReason != "tool_calls" {
+		if response.FinishReason != types.FinishReasonToolCall {
 			sess.AppendMessage(types.Message{
 				Role:    types.RoleAssistant,
 				Content: response.Content,

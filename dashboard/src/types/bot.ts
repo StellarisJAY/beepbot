@@ -1,4 +1,6 @@
 import type { Agent } from './agent'
+import QQIcon from '@/assets/icons/qq.svg'
+import FeishuIcon from '@/assets/icons/feishu.svg'
 
 /**
  * 机器人状态枚举
@@ -33,6 +35,14 @@ export enum BotPlatform {
 }
 
 /**
+ * 机器人平台图标映射
+ */
+export const BotPlatformIcons: Record<BotPlatform, string> = {
+  [BotPlatform.QQ]: QQIcon,
+  [BotPlatform.Feishu]: FeishuIcon,
+}
+
+/**
  * 机器人平台显示名称映射
  */
 export const BotPlatformLabels: Record<BotPlatform, string> = {
@@ -44,8 +54,8 @@ export const BotPlatformLabels: Record<BotPlatform, string> = {
  * 机器人平台选项（用于下拉选择）
  */
 export const BotPlatformOptions = [
-  { value: BotPlatform.QQ, label: BotPlatformLabels[BotPlatform.QQ] },
-  { value: BotPlatform.Feishu, label: BotPlatformLabels[BotPlatform.Feishu] },
+  { value: BotPlatform.QQ, label: BotPlatformLabels[BotPlatform.QQ], icon: BotPlatformIcons[BotPlatform.QQ] },
+  { value: BotPlatform.Feishu, label: BotPlatformLabels[BotPlatform.Feishu], icon: BotPlatformIcons[BotPlatform.Feishu] },
 ]
 
 /**

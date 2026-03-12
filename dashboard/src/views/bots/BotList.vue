@@ -5,7 +5,6 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  MessageOutlined,
   LinkOutlined,
   SearchOutlined,
   ReloadOutlined,
@@ -13,7 +12,7 @@ import {
 import { botApi, type BotFilter } from '@/api/bot'
 import { agentApi } from '@/api/agent'
 import type { Bot, CreateBotRequest, UpdateBotRequest, BindAgentRequest } from '@/types/bot'
-import { BotStatus, BotStatusLabels, BotPlatformLabels, BotStatusOptions, BotPlatformOptions } from '@/types/bot'
+import { BotStatus, BotStatusLabels, BotPlatformLabels, BotStatusOptions, BotPlatformOptions, BotPlatform, BotPlatformIcons } from '@/types/bot'
 import type { Agent } from '@/types/agent'
 import BotFormModal from '@/components/BotFormModal.vue'
 
@@ -199,8 +198,18 @@ onMounted(() => {
         placeholder="平台"
         style="width: 120px"
         allow-clear
-        :options="BotPlatformOptions"
-      />
+      >
+        <a-select-option
+          v-for="option in BotPlatformOptions"
+          :key="option.value"
+          :value="option.value"
+        >
+          <div class="platform-option">
+            <img :src="option.icon" class="platform-option-icon" :alt="option.value" />
+            <span>{{ option.label }}</span>
+          </div>
+        </a-select-option>
+      </a-select>
       <a-button type="primary" @click="handleSearch">
         <template #icon><SearchOutlined /></template>
         查询
@@ -216,7 +225,11 @@ onMounted(() => {
         <a-card v-for="bot in bots" :key="bot.id" class="bot-card" hoverable>
           <template #title>
             <div class="card-title">
-              <MessageOutlined class="card-icon" />
+              <img
+                :src="BotPlatformIcons[bot.platform as BotPlatform]"
+                class="platform-icon"
+                :alt="bot.platform"
+              />
               <span>{{ bot.name }}</span>
             </div>
           </template>
@@ -386,9 +399,10 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.card-icon {
-  font-size: 18px;
-  color: var(--color-primary);
+.platform-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .card-description {
@@ -433,5 +447,17 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin-top: 24px;
+}
+
+.platform-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-option-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 </style>

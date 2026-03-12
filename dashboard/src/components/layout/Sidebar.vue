@@ -72,15 +72,9 @@ const handleMenuClick = ({ key }: { key: string }) => {
       :style="{ borderRight: 0 }"
       @click="handleMenuClick"
     >
-      <a-menu-item v-for="item in menuItems" :key="item.key">
-        <a-tooltip v-if="sidebarStore.collapsed" :title="item.title" placement="right">
-          <component :is="item.icon" />
-          <span class="menu-title">{{ item.title }}</span>
-        </a-tooltip>
-        <template v-else>
-          <component :is="item.icon" />
-          <span class="menu-title">{{ item.title }}</span>
-        </template>
+      <a-menu-item v-for="item in menuItems" :key="item.key" :title="item.title">
+        <component :is="item.icon" />
+        <span class="menu-title">{{ item.title }}</span>
       </a-menu-item>
     </a-menu>
   </a-layout-sider>
