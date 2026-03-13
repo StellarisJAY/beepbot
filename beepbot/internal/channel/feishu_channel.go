@@ -146,12 +146,12 @@ func (c *FeishuChannel) sendTextMessage(ctx context.Context, message OutboundMes
 // sendMarkdownMessage 发送 Markdown 消息（飞书使用 Post 富文本消息）
 func (c *FeishuChannel) sendMarkdownMessage(ctx context.Context, message OutboundMessage) error {
 	// 飞书的 Post 消息格式
-	postContent := map[string]interface{}{
-		"zh_cn": map[string]interface{}{
+	postContent := map[string]any{
+		"zh_cn": map[string]any{
 			"title": "",
-			"content": [][]map[string]interface{}{
+			"content": [][]map[string]any{
 				{
-					{"tag": "text", "text": message.Content},
+					{"tag": "md", "text": message.Content},
 				},
 			},
 		},
