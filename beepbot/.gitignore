@@ -19,3 +19,6 @@ plans
 # build targets
 *.exe
 build
+
+.encryption_key
+.jwt_secret
