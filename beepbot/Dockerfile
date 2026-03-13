@@ -3,6 +3,9 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
+# 设置 Go 代理（国内镜像加速）
+ENV GOPROXY=https://goproxy.cn,https://goproxy.io,direct
+
 # 安装构建依赖
 RUN apk add --no-cache git
 
