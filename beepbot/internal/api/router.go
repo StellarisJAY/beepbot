@@ -28,7 +28,7 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 // SetupRouter 设置 API 路由
-func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService, sessionService *service.SessionService, cronService *service.CronService, skillService *service.SkillService) *gin.Engine {
+func SetupRouter(providerService *service.ProviderService, agentService *service.AgentService, botService *service.BotService, sessionService *service.SessionService, cronService *service.CronService, skillService *service.SkillService, mcpService *service.MCPService) *gin.Engine {
 	router := gin.Default()
 
 	// 添加 CORS 中间件
@@ -41,6 +41,7 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 	sessionHandler := NewSessionHandler(sessionService)
 	cronHandler := NewCronHandler(cronService)
 	skillHandler := NewSkillHandler(skillService)
+	mcpHandler := NewMCPHandler(mcpService)
 
 	// API v1 路由组
 	v1 := router.Group("/api/v1")
@@ -118,6 +119,21 @@ func SetupRouter(providerService *service.ProviderService, agentService *service
 			skills.POST("/upload", skillHandler.UploadSkill)
 			skills.DELETE("/:id", skillHandler.DeleteSkill)
 			skills.PUT("/:id/status", skillHandler.UpdateSkillStatus)
+		}
+
+		// MCP 服务器管理
+		mcp := v1.Group("/mcp")
+		{
+			mcp.GET("", mcpHandler.ListMCPServers)
+			mcp.GET("/:id", mcpHandler.GetMCPServer)
+			mcp.POST("", mcpHandler.CreateMCPServer)
+			mcp.PUT("/:id", mcpHandler.UpdateMCPServer)
+			mcp.DELETE("/:id", mcpHandler.DeleteMCPServer)
+			mcp.PUT("/:id/start", mcpHandler.StartMCPServer)
+			mcp.PUT("/:id/stop", mcpHandler.StopMCPServer)
+			mcp.POST("/:id/test", mcpHandler.TestMCPConnection)
+			mcp.GET("/:id/tools", mcpHandler.GetMCPServerTools)
+			mcp.POST("/:id/reconnect", mcpHandler.ReconnectMCPServer)
 		}
 	}
 

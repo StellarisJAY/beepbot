@@ -8,6 +8,7 @@ import {
   MessageOutlined,
   ClockCircleOutlined,
   BookOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -40,6 +41,11 @@ const menuItems = [
     key: '/skills',
     icon: BookOutlined,
     title: '技能管理',
+  },
+  {
+    key: '/mcp',
+    icon: CloudServerOutlined,
+    title: 'MCP 服务器',
   },
 ]
 

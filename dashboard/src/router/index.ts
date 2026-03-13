@@ -80,6 +80,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '技能详情' },
   },
   {
+    path: '/mcp',
+    name: 'MCP',
+    component: () => import('@/views/mcp/MCPList.vue'),
+    meta: { title: 'MCP 服务器' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/agents',
   },

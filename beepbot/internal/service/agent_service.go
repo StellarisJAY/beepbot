@@ -79,6 +79,8 @@ type CreateAgentRequest struct {
 	Callable bool `json:"callable"`
 	// CallableDescription 作为子智能体时的工具描述
 	CallableDescription string `json:"callable_description"`
+	// EnableMCP 是否启用 MCP 工具
+	EnableMCP bool `json:"enable_mcp"`
 }
 
 // GetAgentDefaults 获取智能体默认配置
@@ -141,6 +143,8 @@ type UpdateAgentRequest struct {
 	Callable *bool `json:"callable,omitempty"`
 	// CallableDescription 作为子智能体时的工具描述
 	CallableDescription string `json:"callable_description,omitempty"`
+	// EnableMCP 是否启用 MCP 工具
+	EnableMCP *bool `json:"enable_mcp,omitempty"`
 }
 
 // SkillBrief 技能简要信息
@@ -179,6 +183,8 @@ type AgentResponse struct {
 	Callable bool `json:"callable"`
 	// CallableDescription 作为子智能体时的工具描述
 	CallableDescription string `json:"callable_description"`
+	// EnableMCP 是否启用 MCP 工具
+	EnableMCP bool `json:"enable_mcp"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
@@ -258,6 +264,7 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		UseAllTools:         req.UseAllTools,           // 默认为 true
 		Callable:            req.Callable,
 		CallableDescription: req.CallableDescription,
+		EnableMCP:           req.EnableMCP,
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
@@ -370,6 +377,11 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 	// 更新 CallableDescription 字段
 	if req.CallableDescription != "" {
 		agent.CallableDescription = req.CallableDescription
+	}
+
+	// 更新 EnableMCP 字段
+	if req.EnableMCP != nil {
+		agent.EnableMCP = *req.EnableMCP
 	}
 
 	agent.UpdatedAt = time.Now()
@@ -513,6 +525,7 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 		UseAllTools:         agent.UseAllTools,
 		Callable:            agent.Callable,
 		CallableDescription: agent.CallableDescription,
+		EnableMCP:           agent.EnableMCP,
 		CreatedAt:           agent.CreatedAt,
 		UpdatedAt:           agent.UpdatedAt,
 	}

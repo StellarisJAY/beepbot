@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
+	"github.com/StellarisJAY/beepbot/internal/mcp"
 	"github.com/StellarisJAY/beepbot/internal/provider"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/session"
@@ -18,6 +20,7 @@ import (
 // NewApiRunner 创建API模式的智能体运行器
 // allowSubAgents: 是否注册 Sub-Agent 工具（父智能体为 true，子智能体为 false 防止递归）
 // parentWorkingDir: 父智能体的工作目录，子智能体继承此目录；为空时使用智能体自己的工作目录
+// mcpManager: MCP 管理器，用于注册 MCP 工具；为 nil 时不注册 MCP 工具
 func NewApiRunner(
 	agentDef *types.Agent,
 	providerDef *types.Provider,
@@ -30,6 +33,7 @@ func NewApiRunner(
 	encryptor *crypto.Encryptor,
 	allowSubAgents bool,
 	parentWorkingDir string,
+	mcpManager *mcp.Manager,
 ) (*AgentRunner, error) {
 	// 创建聊天模型接口
 	llmProvider, err := provider.CreateLLMProviderFromApi(providerDef, agentDef.Model)
@@ -127,6 +131,36 @@ func NewApiRunner(
 		}
 	}
 
+	// 注册 MCP 工具（仅当智能体启用了 MCP 且 mcpManager 不为空时）
+	if mcpManager != nil && agentDef.EnableMCP {
+		mcpTools := mcpManager.GetAllTools()
+		slog.Info("mcp tools", "count", len(mcpTools))
+		for _, toolDef := range mcpTools {
+			// 解析工具名称获取服务器信息
+			serverName, toolName, ok := mcp.ParseToolName(toolDef.Function.Name)
+			if !ok {
+				slog.Info("parse mcp name failed", "toolDef", toolDef.Type)
+				continue
+			}
+			// 通过 serverName 查找对应的客户端（GetClient 需要 serverID，但这里只有 serverName）
+			client := mcpManager.GetClientByServerName(serverName)
+			if client == nil {
+				slog.Info("mcp client not exist", "serverName", serverName)
+				continue
+			}
+			slog.Info("register mcp tool", "name", toolName)
+			// 创建 MCP 工具定义
+			mcpToolDef := types.MCPToolDefinition{
+				Name:        toolName,
+				Description: toolDef.Function.Description,
+				InputSchema: toolDef.Function.Parameters,
+			}
+			// 创建工具代理
+			proxy := mcp.NewToolProxy(mcpManager, client.GetServerID(), serverName, mcpToolDef)
+			toolRegistry.Register(proxy)
+		}
+	}
+
 	// 创建技能管理器
 	skillManager := skill.NewManager(skillRepo, agentRepo, agentDef.ID, config.DataDir)
 
@@ -166,10 +200,11 @@ func NewApiAgentRunner(
 	agentRepo repository.AgentRepository,
 	providerRepo repository.ProviderRepository,
 	encryptor *crypto.Encryptor,
+	mcpManager *mcp.Manager,
 ) (*ApiAgentRunner, error) {
 	// allowSubAgents=true，父智能体可以调用子智能体
 	// parentWorkingDir="" 表示父智能体使用自己的工作目录
-	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps, skillRepo, agentRepo, providerRepo, encryptor, true, "")
+	runner, err := NewApiRunner(agentDef, providerDef, bus, config, cronDeps, skillRepo, agentRepo, providerRepo, encryptor, true, "", mcpManager)
 	if err != nil {
 		return nil, err
 	}

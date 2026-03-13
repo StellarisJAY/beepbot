@@ -53,6 +53,7 @@ func (e *SubAgentExecutor) Execute(ctx context.Context, agentDef *types.Agent, p
 
 	// 创建子智能体运行器（不注册 Sub-Agent 工具，防止递归）
 	// 使用父智能体的工作目录
+	// mcpManager=nil，子智能体不继承 MCP 工具（避免重复注册）
 	runner, err := NewApiRunner(
 		agentDef,
 		providerDef,
@@ -65,6 +66,7 @@ func (e *SubAgentExecutor) Execute(ctx context.Context, agentDef *types.Agent, p
 		e.encryptor,
 		false, // allowSubAgents=false，防止递归调用
 		parentWorkingDir,
+		nil, // mcpManager=nil，子智能体不使用 MCP 工具
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create sub-agent runner: %w", err)

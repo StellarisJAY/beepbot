@@ -17,6 +17,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/database"
 	"github.com/StellarisJAY/beepbot/internal/logger"
+	"github.com/StellarisJAY/beepbot/internal/mcp"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/service"
 	"github.com/StellarisJAY/beepbot/internal/tool"
@@ -78,6 +79,7 @@ func main() {
 	sessionRepo := repository.NewSessionRepository(db)
 	cronRepo := repository.NewCronRepository(db)
 	skillRepo := repository.NewSkillRepository(db)
+	mcpRepo := repository.NewMCPServerRepository(db)
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
@@ -86,6 +88,10 @@ func main() {
 	sessionService := service.NewSessionService(sessionRepo, botRepo)
 	cronService := service.NewCronService(cronRepo, agentService)
 	skillService := service.NewSkillService(skillRepo, agentRepo, cfg.DataDir)
+
+	// 初始化 MCP 管理器和服务
+	mcpManager := mcp.NewManager(mcpRepo)
+	mcpService := service.NewMCPService(mcpRepo, mcpManager)
 
 	// 确保技能目录存在
 	skillsDir := filepath.Join(cfg.DataDir, "skills")
@@ -103,7 +109,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService)
 
 	// 确定 API 端口
 	port := cfg.Port
@@ -149,10 +155,15 @@ func main() {
 	}
 
 	// 启动 AgentManager 消息循环
-	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor, cronDeps)
+	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor, cronDeps, mcpManager)
 	go func() {
 		agentManager.MessageLoop(ctx)
 	}()
+
+	// 启动所有活跃的 MCP 服务器
+	if err := mcpService.StartAllActiveServers(); err != nil {
+		slog.Warn("some MCP servers failed to start", "error", err)
+	}
 
 	// 加载所有 active 状态的 Bot 并启动 Channel
 	activeBots, err := botRepo.GetByStatus(types.BotStatusActive)
@@ -187,6 +198,10 @@ func main() {
 	// 停止所有 Channel
 	slog.Info("Stopping all channels...")
 	channelManager.Shutdown()
+
+	// 停止所有 MCP 服务器
+	slog.Info("Stopping all MCP servers...")
+	mcpService.StopAllServers()
 
 	slog.Info("BeepBot API Server shutdown complete")
 }

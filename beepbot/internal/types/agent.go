@@ -39,7 +39,9 @@ type Agent struct {
 	// Callable 是否可作为子智能体被调用
 	Callable bool `json:"callable" gorm:"column:callable;type:boolean;default:false;index"`
 	// CallableDescription 作为子智能体时的工具描述（供 LLM 理解用途）
-	CallableDescription string    `json:"callable_description" gorm:"column:callable_description;type:text"`
+	CallableDescription string `json:"callable_description" gorm:"column:callable_description;type:text"`
+	// EnableMCP 是否启用 MCP 工具
+	EnableMCP bool `json:"enable_mcp" gorm:"column:enable_mcp;type:boolean;default:false"`
 	CreatedAt           time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
 	UpdatedAt           time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }

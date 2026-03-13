@@ -72,6 +72,8 @@ export interface Agent {
   callable: boolean
   // 作为子智能体时的工具描述
   callable_description: string
+  // 是否启用 MCP 工具
+  enable_mcp: boolean
   created_at: string
   updated_at: string
 }
@@ -123,6 +125,8 @@ export interface CreateAgentRequest {
   // 子智能体配置
   callable?: boolean
   callable_description?: string
+  // MCP 配置
+  enable_mcp?: boolean
 }
 
 /**
@@ -151,6 +155,8 @@ export interface UpdateAgentRequest {
   // 子智能体配置
   callable?: boolean
   callable_description?: string
+  // MCP 配置
+  enable_mcp?: boolean
 }
 
 /**

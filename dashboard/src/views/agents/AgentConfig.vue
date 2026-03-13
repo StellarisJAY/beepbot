@@ -96,6 +96,7 @@ const initForm = () => {
       tool_names: agent.value.tool_names || [],
       callable: agent.value.callable,
       callable_description: agent.value.callable_description,
+      enable_mcp: agent.value.enable_mcp,
     }
   }
 }
@@ -292,6 +293,20 @@ onMounted(() => {
               {{ t.label }}
             </a-select-option>
           </a-select>
+        </a-form-item>
+
+        <!-- MCP 配置 -->
+        <a-divider style="margin: 12px 0">MCP 配置</a-divider>
+
+        <a-form-item label="启用 MCP">
+          <a-switch
+            v-model:checked="form.enable_mcp"
+            checked-children="是"
+            un-checked-children="否"
+          />
+          <span style="margin-left: 8px; color: #999; font-size: 12px">
+            允许智能体使用 MCP (Model Context Protocol) 工具
+          </span>
         </a-form-item>
 
         <!-- 子智能体配置 -->

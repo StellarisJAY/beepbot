@@ -10,6 +10,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
+	"github.com/StellarisJAY/beepbot/internal/mcp"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
@@ -25,6 +26,7 @@ type AgentManager struct {
 	bus          *channel.MessageBus
 	encryptor    *crypto.Encryptor
 	cronDeps     *tool.CronToolDeps // 定时任务工具依赖
+	mcpManager   *mcp.Manager       // MCP 管理器
 
 	config config.APIConfig
 
@@ -40,7 +42,8 @@ func NewAgentManager(
 	providerRepo repository.ProviderRepository,
 	messageBus *channel.MessageBus,
 	encryptor *crypto.Encryptor,
-	cronDeps *tool.CronToolDeps) *AgentManager {
+	cronDeps *tool.CronToolDeps,
+	mcpManager *mcp.Manager) *AgentManager {
 	return &AgentManager{
 		config:       config,
 		agentRepo:    agentRepo,
@@ -51,6 +54,7 @@ func NewAgentManager(
 		bus:          messageBus,
 		encryptor:    encryptor,
 		cronDeps:     cronDeps,
+		mcpManager:   mcpManager,
 		wg:           &sync.WaitGroup{},
 	}
 }
@@ -147,7 +151,7 @@ func (a *AgentManager) startAgentLoop(ctx context.Context, agentDef *types.Agent
 		return
 	}
 	providerDef.APIKey, _ = a.encryptor.Decrypt(providerDef.APIKey)
-	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo, a.providerRepo, a.encryptor)
+	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo, a.providerRepo, a.encryptor, a.mcpManager)
 	if err != nil {
 		slog.Error("create agent runner error", "err", err)
 		return
