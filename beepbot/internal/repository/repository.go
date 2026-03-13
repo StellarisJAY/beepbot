@@ -1,8 +1,13 @@
 package repository
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 )
+
+// ErrNotFound 记录不存在错误
+var ErrNotFound = errors.New("record not found")
 
 // Repository 基础仓储接口
 type Repository[T any] interface {

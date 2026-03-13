@@ -3,6 +3,12 @@ import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/auth/Login.vue'),
+    meta: { title: '登录', public: true },
+  },
+  {
     path: '/',
     redirect: '/agents',
   },
@@ -28,6 +34,12 @@ const routes: RouteRecordRaw[] = [
           header: () => import('@/views/agents/AgentConfig.vue'),
         },
         meta: { title: '编辑智能体' },
+      },
+      {
+        path: 'chat',
+        name: 'AgentChat',
+        component: () => import('@/views/agents/AgentChat.vue'),
+        meta: { title: '调试聊天' },
       },
       {
         path: 'logs',
@@ -96,15 +108,29 @@ const router = createRouter({
   routes,
 })
 
-// 路由守卫 - 更新页面标题
+// 路由守卫
 router.beforeEach((to, _from, next) => {
+  // 更新页面标题
   const title = to.meta.title as string
   if (title) {
     document.title = `${title} - BeepBot`
   } else {
     document.title = 'BeepBot'
   }
-  next()
+
+  // 检查是否需要认证
+  const isPublic = to.meta.public as boolean
+  const token = localStorage.getItem('beepbot_token')
+
+  if (!isPublic && !token) {
+    // 需要认证但没有 token，跳转到登录页
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'Login' && token) {
+    // 已登录访问登录页，跳转到首页
+    next({ path: '/' })
+  } else {
+    next()
+  }
 })
 
 export default router

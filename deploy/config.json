@@ -1,0 +1,18 @@
+{
+  "port": 8888,
+  "beepbot_data_dir": "/data/beepbot",
+  "database": {
+    "type": "postgres",
+    "host": "database",
+    "port": 5432,
+    "user": "beepbot",
+    "password": "beepbot123",
+    "dbname": "beepbot",
+    "sslmode": "disable",
+    "migrate": true
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  }
+}

@@ -75,3 +75,16 @@ func InternalError(c *gin.Context, message string) {
 		Message: message,
 	})
 }
+
+// InternalServerError 500 错误（别名）
+func InternalServerError(c *gin.Context, message string) {
+	InternalError(c, message)
+}
+
+// Unauthorized 401 错误
+func Unauthorized(c *gin.Context, message string) {
+	c.JSON(http.StatusUnauthorized, Response{
+		Code:    http.StatusUnauthorized,
+		Message: message,
+	})
+}

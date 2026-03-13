@@ -9,6 +9,9 @@ import {
   DashboardOutlined,
   SettingOutlined,
   SaveOutlined,
+  MessageOutlined,
+  PlusOutlined,
+  MenuFoldOutlined,
 } from '@ant-design/icons-vue'
 import { agentApi } from '@/api/agent'
 import type { Agent } from '@/types/agent'
@@ -23,7 +26,7 @@ const agent = ref<Agent | null>(null)
 const loading = ref(false)
 
 // 子组件引用
-const configRef = ref<{ handleSave: () => Promise<void>; saving: boolean } | null>(null)
+const componentRef = ref<{ handleSave?: () => Promise<void>; saving?: boolean; newChat?: () => void; toggleSessionDrawer?: () => void } | null>(null)
 
 // 编辑基本信息弹窗
 const editInfoModalVisible = ref(false)
@@ -38,6 +41,7 @@ const currentRoute = computed(() => {
   if (path.endsWith('/edit')) return 'edit'
   if (path.endsWith('/logs')) return 'logs'
   if (path.endsWith('/monitor')) return 'monitor'
+  if (path.endsWith('/chat')) return 'chat'
   return 'edit'
 })
 
@@ -102,8 +106,26 @@ const navigateTo = (nav: string) => {
 
 // 保存配置
 const handleSave = () => {
-  if (configRef.value) {
-    configRef.value.handleSave()
+  if (componentRef.value?.handleSave) {
+    componentRef.value.handleSave()
+  }
+}
+
+// 聊天页面相关状态
+const sessionDrawerVisible = ref(false)
+
+// 新对话
+const handleNewChat = () => {
+  if (componentRef.value?.newChat) {
+    componentRef.value.newChat()
+  }
+}
+
+// 切换会话列表抽屉
+const toggleSessionDrawer = () => {
+  sessionDrawerVisible.value = !sessionDrawerVisible.value
+  if (componentRef.value?.toggleSessionDrawer) {
+    componentRef.value.toggleSessionDrawer()
   }
 }
 
@@ -142,6 +164,14 @@ onMounted(() => {
         <div class="nav-divider" />
         <div
           class="nav-item"
+          :class="{ active: currentRoute === 'chat' }"
+          @click="navigateTo('chat')"
+        >
+          <MessageOutlined class="nav-icon" />
+          <span>聊天</span>
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: currentRoute === 'edit' }"
           @click="navigateTo('edit')"
         >
@@ -177,11 +207,22 @@ onMounted(() => {
           </a-button>
         </div>
         <div class="header-right">
-          <!-- 仅配置页面显示保存按钮 -->
+          <!-- 聊天页面显示新对话和会话列表按钮 -->
+          <template v-if="currentRoute === 'chat'">
+            <a-button type="primary" @click="handleNewChat">
+              <template #icon><PlusOutlined /></template>
+              新对话
+            </a-button>
+            <a-button @click="toggleSessionDrawer">
+              <template #icon><MenuFoldOutlined /></template>
+              会话列表
+            </a-button>
+          </template>
+          <!-- 配置页面显示保存按钮 -->
           <a-button
-            v-if="currentRoute === 'edit'"
+            v-else-if="currentRoute === 'edit'"
             type="primary"
-            :loading="configRef?.saving"
+            :loading="componentRef?.saving"
             @click="handleSave"
           >
             <template #icon><SaveOutlined /></template>
@@ -190,11 +231,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 内容区域 - 可滚动 -->
-      <div class="content-body">
+      <!-- 内容区域 -->
+      <div class="content-body" :class="{ 'no-scroll': currentRoute === 'chat' }">
         <a-spin :spinning="loading">
           <router-view v-slot="{ Component }">
-            <component :is="Component" ref="configRef" />
+            <component :is="Component" ref="componentRef" />
           </router-view>
         </a-spin>
       </div>
@@ -370,5 +411,9 @@ onMounted(() => {
 .content-body {
   flex: 1;
   overflow-y: auto;
+}
+
+.content-body.no-scroll {
+  overflow: hidden;
 }
 </style>

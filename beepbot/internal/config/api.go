@@ -7,6 +7,7 @@ type APIConfig struct {
 	DataDir    string           `json:"beepbot_data_dir"` // 公共数据目录，包含公共技能
 	Database   DatabaseConfig   `json:"database"`         // 数据库配置
 	Encryption EncryptionConfig `json:"encryption"`       // 加密配置
+	JWT        JWTConfig        `json:"jwt"`              // JWT 配置
 }
 
 // DatabaseConfig 数据库配置
@@ -24,6 +25,11 @@ type DatabaseConfig struct {
 // EncryptionConfig 加密配置
 type EncryptionConfig struct {
 	Key string `json:"key"` // Base64 编码的加密密钥，可选
+}
+
+// JWTConfig JWT 配置
+type JWTConfig struct {
+	Secret string `json:"secret"` // JWT 密钥，可选（不提供则自动生成）
 }
 
 // Logging 日志配置

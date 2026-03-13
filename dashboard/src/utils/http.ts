@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+import router from '@/router'
 
 // API 响应结构
 export interface ApiResponse<T = unknown> {
@@ -40,11 +41,11 @@ const createHttpClient = (baseURL: string = DEFAULT_BASE_URL): AxiosInstance => 
   // 请求拦截器
   instance.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-      // 可以在这里添加 token 等认证信息
-      // const token = localStorage.getItem('token')
-      // if (token) {
-      //   config.headers.Authorization = `Bearer ${token}`
-      // }
+      // 添加 token
+      const token = localStorage.getItem('beepbot_token')
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
       return config
     },
     (error) => {
@@ -81,7 +82,9 @@ const createHttpClient = (baseURL: string = DEFAULT_BASE_URL): AxiosInstance => 
             break
           case 401:
             message = '未授权，请重新登录'
-            // 可以在这里处理登录过期逻辑
+            // 清除 token 并跳转到登录页
+            localStorage.removeItem('beepbot_token')
+            router.push('/login')
             break
           case 403:
             message = '拒绝访问'

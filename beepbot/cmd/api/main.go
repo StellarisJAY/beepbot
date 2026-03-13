@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -30,6 +32,34 @@ var (
 
 func init() {
 	flag.StringVar(&configFile, "config", "config.json", "Path to the config file")
+}
+
+// getOrCreateJWTSecret 获取或创建 JWT 密钥
+func getOrCreateJWTSecret(configSecret, keyFilePath string) (string, error) {
+	// 如果配置中提供了密钥，直接使用
+	if configSecret != "" {
+		return configSecret, nil
+	}
+
+	// 尝试从文件读取
+	data, err := os.ReadFile(keyFilePath)
+	if err == nil {
+		return string(data), nil
+	}
+
+	// 文件不存在，生成新的密钥
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate JWT secret: %w", err)
+	}
+	secret := base64.StdEncoding.EncodeToString(bytes)
+
+	// 保存到文件
+	if err := os.WriteFile(keyFilePath, []byte(secret), 0600); err != nil {
+		return "", fmt.Errorf("failed to save JWT secret: %w", err)
+	}
+
+	return secret, nil
 }
 
 func main() {
@@ -80,6 +110,23 @@ func main() {
 	cronRepo := repository.NewCronRepository(db)
 	skillRepo := repository.NewSkillRepository(db)
 	mcpRepo := repository.NewMCPServerRepository(db)
+	adminRepo := repository.NewAdminRepository(db)
+
+	// 初始化 JWT 密钥
+	jwtKeyFilePath := filepath.Join(configDir, ".jwt_secret")
+	jwtSecret, err := getOrCreateJWTSecret(cfg.JWT.Secret, jwtKeyFilePath)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize JWT secret: %w", err))
+	}
+	slog.Info("JWT initialized", "key_file", jwtKeyFilePath)
+
+	// 初始化认证服务
+	authService := service.NewAuthService(adminRepo, jwtSecret)
+
+	// 创建默认管理员
+	if err := authService.CreateDefaultAdmin(); err != nil {
+		slog.Warn("failed to create default admin", "error", err)
+	}
 
 	// 初始化服务层
 	providerService := service.NewProviderService(providerRepo, encryptor)
@@ -109,7 +156,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService, authService)
 
 	// 确定 API 端口
 	port := cfg.Port
