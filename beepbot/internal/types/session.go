@@ -1,6 +1,9 @@
 package types
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,16 +20,45 @@ const (
 	SessionTypeCron SessionType = "cron"
 )
 
+// IMSessionContext IM 会话上下文信息，用于存储和调试
+type IMSessionContext struct {
+	UserID  string `json:"user_id,omitempty"`  // 用户 ID
+	GroupID string `json:"group_id,omitempty"` // 群 ID
+	ChatID  string `json:"chat_id,omitempty"`  // 会话 ID（飞书）
+}
+
+// Value 实现 driver.Valuer 接口，用于 GORM 写入数据库
+func (c *IMSessionContext) Value() (driver.Value, error) {
+	if c == nil {
+		return nil, nil
+	}
+	return json.Marshal(c)
+}
+
+// Scan 实现 sql.Scanner 接口，用于 GORM 从数据库读取
+func (c *IMSessionContext) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan IMSessionContext: expected []byte")
+	}
+	return json.Unmarshal(bytes, c)
+}
+
 type Session struct {
-	ID                string      `gorm:"column:id;type:varchar(64);primaryKey"`
-	Key               string      `gorm:"column:key;type:varchar(255);uniqueIndex;not null"`
-	AgentID           string      `gorm:"column:agent_id;type:varchar(64);not null;index"`
-	BotID             string      `gorm:"column:bot_id;type:varchar(64);not null;index"`
-	SessionType       SessionType `gorm:"column:session_type;type:varchar(32);not null;default:'chat';index"` // 会话类型：chat/cron
-	Summary           string      `gorm:"column:summary;type:text"`
-	LastContextTokens int64       `gorm:"column:last_context_tokens;type:bigint;default:0"` // 最后一次 LLM 调用的上下文 token 大小
-	CreatedAt         time.Time   `gorm:"column:created_at;type:timestamptz;autoCreateTime"`
-	UpdatedAt         time.Time   `gorm:"column:updated_at;type:timestamptz;autoUpdateTime"`
+	ID                string            `gorm:"column:id;type:varchar(64);primaryKey"`
+	Key               string            `gorm:"column:key;type:varchar(255);uniqueIndex;not null"`
+	AgentID           string            `gorm:"column:agent_id;type:varchar(64);not null;index"`
+	BotID             string            `gorm:"column:bot_id;type:varchar(64);not null;index"`
+	SessionType       SessionType       `gorm:"column:session_type;type:varchar(32);not null;default:'chat';index"` // 会话类型：chat/cron
+	CronJobID         *string           `gorm:"column:cron_job_id;type:varchar(64);index"`                          // 定时任务 ID（仅定时任务会话）
+	IMContext         *IMSessionContext `gorm:"column:im_context;type:jsonb"`                                        // IM 会话上下文，方便调试
+	Summary           string            `gorm:"column:summary;type:text"`
+	LastContextTokens int64             `gorm:"column:last_context_tokens;type:bigint;default:0"` // 最后一次 LLM 调用的上下文 token 大小
+	CreatedAt         time.Time         `gorm:"column:created_at;type:timestamptz;autoCreateTime"`
+	UpdatedAt         time.Time         `gorm:"column:updated_at;type:timestamptz;autoUpdateTime"`
 }
 
 // BeforeCreate 在创建记录前自动设置ID和时间

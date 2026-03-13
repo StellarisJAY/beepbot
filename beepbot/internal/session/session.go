@@ -36,4 +36,13 @@ type Session interface {
 	GetMaxTokens() int64
 
 	GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string
+
+	// GetSessionID 返回会话 ID
+	GetSessionID() string
+
+	// GetCronJobID 返回定时任务 ID（仅定时任务会话有值）
+	GetCronJobID() *string
+
+	// GetIMContext 返回 IM 会话上下文
+	GetIMContext() *types.IMSessionContext
 }

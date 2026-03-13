@@ -238,7 +238,6 @@ func (m *Manager) GetClientByServerName(serverName string) *Client {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, client := range m.clients {
-		slog.Info("server name", "want", serverName, "have", client.GetServerName())
 		if client.GetServerName() == serverName {
 			return client
 		}

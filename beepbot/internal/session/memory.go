@@ -84,3 +84,18 @@ func (s *InMemorySession) GetMaxTokens() int64 {
 func (s *InMemorySession) GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string {
 	return ""
 }
+
+// GetSessionID 返回会话 ID（内存会话返回空）
+func (s *InMemorySession) GetSessionID() string {
+	return ""
+}
+
+// GetCronJobID 返回定时任务 ID（内存会话返回 nil）
+func (s *InMemorySession) GetCronJobID() *string {
+	return nil
+}
+
+// GetIMContext 返回 IM 会话上下文（内存会话返回 nil）
+func (s *InMemorySession) GetIMContext() *types.IMSessionContext {
+	return nil
+}

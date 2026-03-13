@@ -1,9 +1,13 @@
 package session
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/StellarisJAY/beepbot/internal/repository"
@@ -25,6 +29,9 @@ type ApiSession struct {
 	needCompress  bool
 	summary       string
 
+	cronJobID *string                // 定时任务 ID
+	imContext *types.IMSessionContext // IM 会话上下文
+
 	repo  repository.SessionRepository
 	mutex *sync.RWMutex
 }
@@ -36,6 +43,8 @@ func NewApiSession(
 	agentID string,
 	botID string,
 	sessionType types.SessionType,
+	cronJobID *string,
+	imContext *types.IMSessionContext,
 	maxTokens int64,
 	compressionRatio float64,
 	compressionKeepSize int,
@@ -53,6 +62,8 @@ func NewApiSession(
 			AgentID:     agentID,
 			BotID:       botID,
 			SessionType: sessionType,
+			CronJobID:   cronJobID,
+			IMContext:   imContext,
 		}
 		if err := repo.CreateSession(session); err != nil {
 			return nil, err
@@ -68,6 +79,8 @@ func NewApiSession(
 		compressionKeepSize: compressionKeepSize,
 		contextTokens:       session.LastContextTokens, // 从数据库加载上下文 token 大小
 		summary:             session.Summary,
+		cronJobID:           session.CronJobID,
+		imContext:           session.IMContext,
 		repo:                repo,
 		mutex:               &sync.RWMutex{},
 	}, nil
@@ -249,6 +262,42 @@ func (s *ApiSession) GetSessionKey(sessionType types.SessionType, channelID stri
 // - chatID: 飞书为 chat_id，QQ 为群ID或空（私聊）
 func GetApiSessionKey(sessionType types.SessionType, agentID string, channelID string, chatID string, userID string) string {
 	return fmt.Sprintf("%s:%s:%s:%s:%s", sessionType, agentID, channelID, chatID, userID)
+}
+
+// GetSessionID 返回会话 ID
+func (s *ApiSession) GetSessionID() string {
+	return s.sessionID
+}
+
+// GetCronJobID 返回定时任务 ID
+func (s *ApiSession) GetCronJobID() *string {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.cronJobID
+}
+
+// GetIMContext 返回 IM 会话上下文
+func (s *ApiSession) GetIMContext() *types.IMSessionContext {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.imContext
+}
+
+// GetSessionWorkDir 返回会话的工作目录
+// 格式：{baseWorkDir}/sessions/{sha256(sessionKey)[:16]}
+func GetSessionWorkDir(baseWorkDir string, sessionKey string) string {
+	hash := sha256.Sum256([]byte(sessionKey))
+	shortHash := hex.EncodeToString(hash[:8]) // 16 字符
+	return filepath.Join(baseWorkDir, "sessions", shortHash)
+}
+
+// EnsureSessionWorkDir 确保会话工作目录存在，返回完整路径
+func EnsureSessionWorkDir(baseWorkDir string, sessionKey string) (string, error) {
+	workDir := GetSessionWorkDir(baseWorkDir, sessionKey)
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return "", err
+	}
+	return workDir, nil
 }
 
 // convertToSessionMessage 将 types.Message 转换为 types.SessionMessage
