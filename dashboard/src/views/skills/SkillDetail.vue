@@ -72,7 +72,10 @@ const fetchSkill = async () => {
     skill.value = res.data
     // 默认选中第一个文件
     if (res.data.files?.length > 0) {
-      handleViewFile(res.data.files[0])
+      const firstFile = res.data.files[0]
+      if (firstFile) {
+        handleViewFile(firstFile)
+      }
     }
   } catch (error: unknown) {
     const err = error as { message?: string }
@@ -231,13 +234,15 @@ onMounted(() => {
                 <!-- 根目录文件 -->
                 <template v-if="!item.isDir && item.children && item.children.length > 0">
                   <div
+                    v-for="child in item.children"
+                    :key="child.id"
                     class="file-item"
-                    :class="{ active: selectedFile?.id === item.children[0].id }"
-                    @click="item.children[0] && handleViewFile(item.children[0])"
+                    :class="{ active: selectedFile?.id === child.id }"
+                    @click="handleViewFile(child)"
                   >
                     <FileOutlined class="file-icon" />
-                    <span class="file-name">{{ item.name }}</span>
-                    <span class="file-size">{{ formatFileSize(item.children[0].file_size) }}</span>
+                    <span class="file-name">{{ child.file_name }}</span>
+                    <span class="file-size">{{ formatFileSize(child.file_size) }}</span>
                   </div>
                 </template>
               </template>

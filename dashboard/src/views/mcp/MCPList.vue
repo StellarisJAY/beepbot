@@ -169,8 +169,10 @@ const removeHeader = (index: number) => {
 const buildHeaders = (): Record<string, string> | undefined => {
   const headers: Record<string, string> = {}
   for (let i = 0; i < headerKeys.value.length; i++) {
-    if (headerKeys.value[i] && headerValues.value[i]) {
-      headers[headerKeys.value[i]] = headerValues.value[i]
+    const key = headerKeys.value[i]
+    const value = headerValues.value[i]
+    if (key && value) {
+      headers[key] = value
     }
   }
   return Object.keys(headers).length > 0 ? headers : undefined
