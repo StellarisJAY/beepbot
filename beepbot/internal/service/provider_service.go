@@ -249,3 +249,65 @@ func (s *ProviderService) toResponse(provider *types.Provider) *ProviderResponse
 		UpdatedAt:    provider.UpdatedAt,
 	}
 }
+
+// EncryptExternalConfig 加密外部智能体配置中的敏感字段
+func (s *ProviderService) EncryptExternalConfig(config map[string]any, sensitiveFields []string) (map[string]any, error) {
+	result := make(map[string]any)
+	for k, v := range config {
+		result[k] = v
+	}
+
+	for _, field := range sensitiveFields {
+		if value, ok := result[field].(string); ok && value != "" {
+			encrypted, err := s.encryptor.Encrypt(value)
+			if err != nil {
+				return nil, fmt.Errorf("encrypt field %s failed: %w", field, err)
+			}
+			result[field] = encrypted
+		}
+	}
+
+	return result, nil
+}
+
+// DecryptExternalConfig 解密外部智能体配置中的敏感字段
+func (s *ProviderService) DecryptExternalConfig(config map[string]any, sensitiveFields []string) (map[string]any, error) {
+	result := make(map[string]any)
+	for k, v := range config {
+		result[k] = v
+	}
+
+	for _, field := range sensitiveFields {
+		if value, ok := result[field].(string); ok && value != "" {
+			decrypted, err := s.encryptor.Decrypt(value)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt field %s failed: %w", field, err)
+			}
+			result[field] = decrypted
+		}
+	}
+
+	return result, nil
+}
+
+// MaskExternalConfig 对外部智能体配置中的敏感字段进行脱敏
+func (s *ProviderService) MaskExternalConfig(config map[string]any, sensitiveFields []string) map[string]any {
+	result := make(map[string]any)
+	for k, v := range config {
+		result[k] = v
+	}
+
+	for _, field := range sensitiveFields {
+		if value, ok := result[field].(string); ok && value != "" {
+			// 先解密再脱敏
+			decrypted, err := s.encryptor.Decrypt(value)
+			if err == nil {
+				result[field+"_masked"] = crypto.MaskAPIKey(decrypted)
+			}
+			// 删除原始加密值
+			delete(result, field)
+		}
+	}
+
+	return result
+}

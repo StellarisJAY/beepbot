@@ -1,12 +1,14 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/types"
+	"gorm.io/datatypes"
 )
 
 // AgentService 智能体服务
@@ -81,6 +83,12 @@ type CreateAgentRequest struct {
 	CallableDescription string `json:"callable_description"`
 	// EnableMCP 是否启用 MCP 工具
 	EnableMCP bool `json:"enable_mcp"`
+	// External 是否为外部智能体
+	External bool `json:"external"`
+	// ExternalType 外部智能体类型（dify）
+	ExternalType string `json:"external_type"`
+	// ExternalConfig 外部智能体配置
+	ExternalConfig map[string]any `json:"external_config"`
 }
 
 // GetAgentDefaults 获取智能体默认配置
@@ -100,14 +108,38 @@ func (s *AgentService) GetAgentDefaults() *AgentDefaults {
 func (s *AgentService) ValidateAgentConfig(agent *AgentResponse) *ValidationResult {
 	var errs []string
 
-	if agent.ProviderID == "" {
-		errs = append(errs, "供应商不能为空")
-	}
-	if agent.Model == "" {
-		errs = append(errs, "模型不能为空")
-	}
-	if agent.WorkingDir == "" {
-		errs = append(errs, "工作目录不能为空")
+	// 外部智能体验证 ExternalConfig
+	if agent.External {
+		if agent.ExternalType == "" {
+			errs = append(errs, "外部智能体类型不能为空")
+		}
+		if agent.ExternalConfig == nil {
+			errs = append(errs, "外部智能体配置不能为空")
+		} else {
+			// 验证 Dify 配置
+			if agent.ExternalType == string(types.ExternalTypeDify) {
+				if baseURL, ok := agent.ExternalConfig["base_url"].(string); !ok || baseURL == "" {
+					errs = append(errs, "Dify API 地址不能为空")
+				}
+				// API Key 可能是 api_key_masked（已配置）或 api_key（新配置）
+				apiKey, hasAPIKey := agent.ExternalConfig["api_key"].(string)
+				apiKeyMasked, hasAPIKeyMasked := agent.ExternalConfig["api_key_masked"].(string)
+				if (!hasAPIKey || apiKey == "") && (!hasAPIKeyMasked || apiKeyMasked == "") {
+					errs = append(errs, "Dify API Key 不能为空")
+				}
+			}
+		}
+	} else {
+		// 普通智能体验证
+		if agent.ProviderID == "" {
+			errs = append(errs, "供应商不能为空")
+		}
+		if agent.Model == "" {
+			errs = append(errs, "模型不能为空")
+		}
+		if agent.WorkingDir == "" {
+			errs = append(errs, "工作目录不能为空")
+		}
 	}
 
 	return &ValidationResult{
@@ -145,6 +177,8 @@ type UpdateAgentRequest struct {
 	CallableDescription string `json:"callable_description,omitempty"`
 	// EnableMCP 是否启用 MCP 工具
 	EnableMCP *bool `json:"enable_mcp,omitempty"`
+	// ExternalConfig 外部智能体配置（仅外部智能体可用）
+	ExternalConfig map[string]any `json:"external_config,omitempty"`
 }
 
 // SkillBrief 技能简要信息
@@ -185,6 +219,12 @@ type AgentResponse struct {
 	CallableDescription string `json:"callable_description"`
 	// EnableMCP 是否启用 MCP 工具
 	EnableMCP bool `json:"enable_mcp"`
+	// External 是否为外部智能体
+	External bool `json:"external"`
+	// ExternalType 外部智能体类型
+	ExternalType string `json:"external_type,omitempty"`
+	// ExternalConfig 外部智能体配置（API Key 脱敏）
+	ExternalConfig map[string]any `json:"external_config,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
@@ -196,10 +236,23 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		return nil, errors.New("agent name already exists")
 	}
 
-	// 如果指定了供应商，检查是否存在
-	if req.ProviderID != "" {
-		if _, err := s.providerService.GetProvider(req.ProviderID); err != nil {
-			return nil, errors.New("provider not found")
+	// 外部智能体验证
+	if req.External {
+		if req.ExternalType == "" {
+			return nil, errors.New("external_type is required for external agent")
+		}
+		if req.ExternalType != string(types.ExternalTypeDify) {
+			return nil, errors.New("unsupported external type: " + req.ExternalType)
+		}
+		if req.ExternalConfig == nil {
+			return nil, errors.New("external_config is required for external agent")
+		}
+	} else {
+		// 普通智能体验证供应商（如果指定了）
+		if req.ProviderID != "" {
+			if _, err := s.providerService.GetProvider(req.ProviderID); err != nil {
+				return nil, errors.New("provider not found")
+			}
 		}
 	}
 
@@ -216,7 +269,7 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 	}
 
 	workingDir := req.WorkingDir
-	if workingDir == "" {
+	if workingDir == "" && !req.External {
 		workingDir = fmt.Sprintf("/data/agents/%s", agentID)
 	}
 
@@ -245,6 +298,18 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		contextMaxTokens = defaults.ContextMaxTokens
 	}
 
+	// 处理外部配置加密
+	var externalConfig datatypes.JSON
+	if req.External && req.ExternalConfig != nil {
+		// 加密敏感字段
+		encryptedConfig, err := s.providerService.EncryptExternalConfig(req.ExternalConfig, []string{"api_key"})
+		if err != nil {
+			return nil, fmt.Errorf("encrypt external config failed: %w", err)
+		}
+		data, _ := json.Marshal(encryptedConfig)
+		externalConfig = data
+	}
+
 	agent := &types.Agent{
 		ID:                  agentID,
 		Name:                req.Name,
@@ -265,6 +330,9 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		Callable:            req.Callable,
 		CallableDescription: req.CallableDescription,
 		EnableMCP:           req.EnableMCP,
+		External:            req.External,
+		ExternalType:        types.ExternalType(req.ExternalType),
+		ExternalConfig:      externalConfig,
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
@@ -382,6 +450,41 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 	// 更新 EnableMCP 字段
 	if req.EnableMCP != nil {
 		agent.EnableMCP = *req.EnableMCP
+	}
+
+	// 更新外部智能体配置（仅外部智能体可用）
+	if agent.External && req.ExternalConfig != nil {
+		// 合并现有配置和新配置
+		var existingConfig map[string]any
+		if agent.ExternalConfig != nil {
+			_ = json.Unmarshal(agent.ExternalConfig, &existingConfig)
+		}
+		if existingConfig == nil {
+			existingConfig = make(map[string]any)
+		}
+
+		// 合并新配置
+		for k, v := range req.ExternalConfig {
+			// 如果是 api_key 字段且值不为空，需要加密
+			if k == "api_key" {
+				if strVal, ok := v.(string); ok && strVal != "" {
+					encryptedConfig, err := s.providerService.EncryptExternalConfig(
+						map[string]any{"api_key": strVal},
+						[]string{"api_key"},
+					)
+					if err != nil {
+						return nil, fmt.Errorf("encrypt api_key failed: %w", err)
+					}
+					existingConfig["api_key"] = encryptedConfig["api_key"]
+				}
+				// 如果 api_key 为空，保持原有值不变
+			} else {
+				existingConfig[k] = v
+			}
+		}
+
+		data, _ := json.Marshal(existingConfig)
+		agent.ExternalConfig = data
 	}
 
 	agent.UpdatedAt = time.Now()
@@ -506,7 +609,7 @@ func (s *AgentService) GetAgentEntityWithProvider(id string) (*types.Agent, erro
 
 // toResponse 转换为响应格式
 func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
-	return &AgentResponse{
+	response := &AgentResponse{
 		ID:                  agent.ID,
 		Name:                agent.Name,
 		Description:         agent.Description,
@@ -526,9 +629,22 @@ func (s *AgentService) toResponse(agent *types.Agent) *AgentResponse {
 		Callable:            agent.Callable,
 		CallableDescription: agent.CallableDescription,
 		EnableMCP:           agent.EnableMCP,
+		External:            agent.External,
+		ExternalType:        string(agent.ExternalType),
 		CreatedAt:           agent.CreatedAt,
 		UpdatedAt:           agent.UpdatedAt,
 	}
+
+	// 处理外部智能体配置
+	if agent.External && agent.ExternalConfig != nil {
+		var config map[string]any
+		if err := json.Unmarshal(agent.ExternalConfig, &config); err == nil {
+			// 对敏感字段进行脱敏
+			response.ExternalConfig = s.providerService.MaskExternalConfig(config, []string{"api_key"})
+		}
+	}
+
+	return response
 }
 
 // toResponseWithRelations 转换为响应格式（包含关联数据）

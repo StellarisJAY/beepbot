@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
 
+	"github.com/StellarisJAY/beepbot/internal/agent/dify"
 	"github.com/StellarisJAY/beepbot/internal/agent/react"
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
@@ -137,8 +139,11 @@ func (a *AgentManager) MessageLoop(ctx context.Context) {
 				agentDef = bot.Agent
 			}
 
-			// 启动智能体
-			go a.startReActAgent(ctx, agentDef, msg)
+			if agentDef.External {
+				go a.runExternalAgent(ctx, agentDef, msg)
+			} else {
+				go a.startReActAgent(ctx, agentDef, msg)
+			}
 		}
 	}
 }
@@ -218,6 +223,88 @@ func (a *AgentManager) startReActAgent(ctx context.Context, agentDef *types.Agen
 		slog.Error("create agent runner error", "err", err)
 		return
 	}
+
+	if err := runner.RunWithMessage(ctx, sess, message); err != nil {
+		slog.Error("agent loop error", "err", err)
+	}
+}
+
+func (a *AgentManager) runExternalAgent(ctx context.Context, agentDef *types.Agent, message channel.InboundMessage) {
+	a.wg.Add(1)
+	defer a.wg.Done()
+
+	var cronJobID *string
+	if message.Channel == channel.ChannelCron {
+		cronJobID = &message.UserID
+	}
+
+	sessionType := message.SessionType
+	if sessionType == "" {
+		sessionType = types.SessionTypeChat
+	}
+
+	// 生成会话 Key（使用 ChatID）
+	sessionKey := session.GetApiSessionKey(sessionType, agentDef.ID, message.Channel, message.ChatID, message.UserID)
+
+	// 构建 IM 上下文
+	imContext := &types.IMSessionContext{
+		UserID:  message.UserID,
+		GroupID: message.GroupID,
+		ChatID:  message.ChatID,
+	}
+
+	sess, err := session.NewExternalSession(
+		a.sessionRepo,
+		sessionKey,
+		agentDef.ID,
+		message.Channel,
+		message.SessionType,
+		cronJobID,
+		imContext,
+	)
+	if err != nil {
+		slog.Error("create external session failed", "error", err)
+		return
+	}
+
+	// 解析外部配置
+	if agentDef.ExternalType != types.ExternalTypeDify {
+		slog.Error("unsupported external agent type", "type", agentDef.ExternalType)
+		return
+	}
+
+	// 解析 Dify 配置
+	var difyConfig types.DifyConfig
+	if agentDef.ExternalConfig != nil {
+		// 解密配置
+		var configMap map[string]any
+		if err := json.Unmarshal(agentDef.ExternalConfig, &configMap); err != nil {
+			slog.Error("parse external config failed", "error", err)
+			return
+		}
+
+		// 解密敏感字段
+		if apiKey, ok := configMap["api_key"].(string); ok && apiKey != "" {
+			decrypted, err := a.encryptor.Decrypt(apiKey)
+			if err != nil {
+				slog.Error("decrypt api_key failed", "error", err)
+				return
+			}
+			difyConfig.APIKey = decrypted
+		}
+
+		// 提取配置
+		if baseURL, ok := configMap["base_url"].(string); ok {
+			difyConfig.BaseURL = baseURL
+		}
+	}
+
+	if difyConfig.BaseURL == "" || difyConfig.APIKey == "" {
+		slog.Error("dify config is incomplete", "base_url", difyConfig.BaseURL)
+		return
+	}
+
+	runner := dify.NewDifyRunner(difyConfig.BaseURL, difyConfig.APIKey, "blocking", a.bus)
 
 	if err := runner.RunWithMessage(ctx, sess, message); err != nil {
 		slog.Error("agent loop error", "err", err)

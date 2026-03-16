@@ -23,6 +23,36 @@ export const AgentStatusOptions = [
 ]
 
 /**
+ * 外部智能体类型枚举
+ */
+export enum ExternalType {
+  Dify = 'dify',
+}
+
+/**
+ * 外部智能体类型显示名称映射
+ */
+export const ExternalTypeLabels: Record<ExternalType, string> = {
+  [ExternalType.Dify]: 'Dify',
+}
+
+/**
+ * 外部智能体类型选项
+ */
+export const ExternalTypeOptions = [
+  { value: ExternalType.Dify, label: ExternalTypeLabels[ExternalType.Dify] },
+]
+
+/**
+ * Dify 配置
+ */
+export interface DifyConfig {
+  base_url: string
+  api_key?: string // 创建/更新时传入
+  api_key_masked?: string // 响应时返回
+}
+
+/**
  * 供应商简要信息（Agent 关联）
  */
 export interface ProviderBrief {
@@ -74,6 +104,12 @@ export interface Agent {
   callable_description: string
   // 是否启用 MCP 工具
   enable_mcp: boolean
+  // 是否为外部智能体
+  external: boolean
+  // 外部智能体类型
+  external_type?: ExternalType
+  // 外部智能体配置
+  external_config?: DifyConfig
   created_at: string
   updated_at: string
 }
@@ -127,6 +163,10 @@ export interface CreateAgentRequest {
   callable_description?: string
   // MCP 配置
   enable_mcp?: boolean
+  // 外部智能体配置
+  external?: boolean
+  external_type?: ExternalType
+  external_config?: DifyConfig
 }
 
 /**
@@ -157,6 +197,8 @@ export interface UpdateAgentRequest {
   callable_description?: string
   // MCP 配置
   enable_mcp?: boolean
+  // 外部智能体配置（仅外部智能体可用）
+  external_config?: DifyConfig
 }
 
 /**

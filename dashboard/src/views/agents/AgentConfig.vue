@@ -8,11 +8,15 @@ import type { Agent, AgentDefaults, UpdateAgentRequest, SkillBrief } from '@/typ
 import type { Provider } from '@/types/provider'
 import type { Skill } from '@/types/skill'
 import { AgentStatus, AvailableTools } from '@/types/agent'
+import AgentExternalConfig from './AgentExternalConfig.vue'
 
 // 从父组件注入的数据
 const agent = inject<Ref<Agent | null>>('agent')
 const agentId = inject<ComputedRef<string>>('agentId')
 const fetchAgent = inject<() => Promise<void>>('fetchAgent')
+
+// 子组件引用
+const externalConfigRef = ref<{ handleSave?: () => Promise<void>; saving?: boolean } | null>(null)
 
 // 数据
 const defaults = ref<AgentDefaults | null>(null)
@@ -103,6 +107,14 @@ const initForm = () => {
 
 // 保存
 const handleSave = async () => {
+  // 如果是外部智能体，调用外部配置组件的保存方法
+  if (agent?.value?.external) {
+    if (externalConfigRef.value?.handleSave) {
+      await externalConfigRef.value.handleSave()
+    }
+    return
+  }
+
   // 校验必填项
   if (!form.value.provider_id) {
     message.warning('请选择供应商')
@@ -135,7 +147,12 @@ const handleSave = async () => {
 // 暴露给父组件的方法
 defineExpose({
   handleSave,
-  saving,
+  saving: computed(() => {
+    if (agent?.value?.external) {
+      return externalConfigRef.value?.saving || false
+    }
+    return saving.value
+  }),
 })
 
 // 监听 agent 变化初始化表单
@@ -158,8 +175,13 @@ onMounted(() => {
 
 <template>
   <div class="config-content">
-    <!-- 模型配置 -->
-    <a-card title="模型配置" size="small" class="config-card">
+    <!-- 外部智能体显示专用配置组件 -->
+    <AgentExternalConfig v-if="agent?.external" ref="externalConfigRef" />
+
+    <!-- 普通智能体配置 -->
+    <template v-else>
+      <!-- 模型配置 -->
+      <a-card title="模型配置" size="small" class="config-card">
       <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
         <a-form-item label="供应商" required>
           <a-select
@@ -392,6 +414,7 @@ onMounted(() => {
         </a-form-item>
       </a-form>
     </a-card>
+    </template>
   </div>
 </template>
 

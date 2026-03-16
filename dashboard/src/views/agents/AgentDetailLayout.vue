@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons-vue'
 import { agentApi } from '@/api/agent'
 import type { Agent } from '@/types/agent'
+import AgentExternalConfig from './AgentExternalConfig.vue'
 
 const route = useRoute()
 const router = useRouter()

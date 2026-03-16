@@ -56,7 +56,7 @@ type Agent struct {
 	// ExternalType 外部智能体类型
 	ExternalType ExternalType `json:"external_type" gorm:"column:external_type;type:varchar(32);default:null"`
 	// ExternalConfig 外部智能体接入配置
-	ExternalConfig datatypes.JSON `json:"external_config" gorm:"column:external_type;type:jsonb;default:null"`
+	ExternalConfig datatypes.JSON `json:"external_config" gorm:"column:external_config;type:jsonb;default:null"`
 
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
@@ -86,4 +86,16 @@ type UsageStatsPoint struct {
 // UsageStatsResponse 用量统计响应
 type UsageStatsResponse struct {
 	Points []UsageStatsPoint `json:"points"`
+}
+
+// DifyConfig Dify 外部智能体配置
+type DifyConfig struct {
+	BaseURL string `json:"base_url"` // Dify API 地址
+	APIKey  string `json:"api_key"`  // API Key（明文，用于加密前）
+}
+
+// DifyConfigResponse Dify 配置响应（API Key 脱敏）
+type DifyConfigResponse struct {
+	BaseURL      string `json:"base_url"`
+	APIKeyMasked string `json:"api_key_masked"` // 脱敏显示
 }
