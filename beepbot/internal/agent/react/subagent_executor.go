@@ -1,4 +1,4 @@
-package agent
+package react
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
+	"github.com/StellarisJAY/beepbot/internal/mcp"
 	"github.com/StellarisJAY/beepbot/internal/repository"
 	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/tool"
@@ -23,6 +24,7 @@ type SubAgentExecutor struct {
 	encryptor    *crypto.Encryptor             // 解密工具，用于解密供应商key
 	cronDeps     *tool.CronToolDeps            // cron工具依赖
 	bus          *channel.MessageBus           // 消息总线
+	mcpManager   *mcp.Manager                  // MCP管理器
 }
 
 // NewSubAgentExecutor 创建子智能体执行器
@@ -34,6 +36,7 @@ func NewSubAgentExecutor(
 	encryptor *crypto.Encryptor,
 	cronDeps *tool.CronToolDeps,
 	bus *channel.MessageBus,
+	mcpManager *mcp.Manager,
 ) *SubAgentExecutor {
 	return &SubAgentExecutor{
 		config:       config,
@@ -43,6 +46,7 @@ func NewSubAgentExecutor(
 		encryptor:    encryptor,
 		cronDeps:     cronDeps,
 		bus:          bus,
+		mcpManager:   mcpManager,
 	}
 }
 
@@ -54,20 +58,20 @@ func (e *SubAgentExecutor) Execute(ctx context.Context, agentDef *types.Agent, p
 	// 创建子智能体运行器（不注册 Sub-Agent 工具，防止递归）
 	// 使用父智能体的工作目录
 	// mcpManager=nil，子智能体不继承 MCP 工具（避免重复注册）
-	runner, err := NewApiRunner(
-		agentDef,
-		providerDef,
-		e.bus,
-		e.config,
-		e.cronDeps,
-		e.skillRepo,
-		e.agentRepo,
-		e.providerRepo,
-		e.encryptor,
-		false, // allowSubAgents=false，防止递归调用
-		parentWorkingDir,
-		nil, // mcpManager=nil，子智能体不使用 MCP 工具
-	)
+	runner, err := NewApiAgentRunner(NewReactAgentParam{
+		AgentDef:         agentDef,
+		ProviderDef:      providerDef,
+		Bus:              e.bus,
+		Config:           e.config,
+		SkillRepo:        e.skillRepo,
+		CronDeps:         e.cronDeps,
+		AgentRepo:        e.agentRepo,
+		ProviderRepo:     e.providerRepo,
+		Encryptor:        e.encryptor,
+		McpManager:       e.mcpManager,
+		AllowSubAgents:   false,            // 不允许递归调用子智能体
+		ParentWorkingDir: parentWorkingDir, // 继承父智能体的工作空间
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create sub-agent runner: %w", err)
 	}

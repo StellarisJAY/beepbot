@@ -29,7 +29,7 @@ type ApiSession struct {
 	needCompress  bool
 	summary       string
 
-	cronJobID *string                // 定时任务 ID
+	cronJobID *string                 // 定时任务 ID
 	imContext *types.IMSessionContext // IM 会话上下文
 
 	repo  repository.SessionRepository

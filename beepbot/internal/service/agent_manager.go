@@ -6,12 +6,13 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/StellarisJAY/beepbot/internal/agent"
+	"github.com/StellarisJAY/beepbot/internal/agent/react"
 	"github.com/StellarisJAY/beepbot/internal/channel"
 	"github.com/StellarisJAY/beepbot/internal/config"
 	"github.com/StellarisJAY/beepbot/internal/crypto"
 	"github.com/StellarisJAY/beepbot/internal/mcp"
 	"github.com/StellarisJAY/beepbot/internal/repository"
+	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/tool"
 	"github.com/StellarisJAY/beepbot/internal/types"
 	"gorm.io/gorm"
@@ -137,27 +138,88 @@ func (a *AgentManager) MessageLoop(ctx context.Context) {
 			}
 
 			// 启动智能体
-			go a.startAgentLoop(ctx, agentDef, msg)
+			go a.startReActAgent(ctx, agentDef, msg)
 		}
 	}
 }
 
-func (a *AgentManager) startAgentLoop(ctx context.Context, agentDef *types.Agent, msg channel.InboundMessage) {
+func (a *AgentManager) startReActAgent(ctx context.Context, agentDef *types.Agent, message channel.InboundMessage) {
 	a.wg.Add(1)
 	defer a.wg.Done()
+
+	var cronJobID *string
+	if message.Channel == channel.ChannelCron {
+		cronJobID = &message.UserID
+	}
+
 	providerDef, err := a.providerRepo.GetByID(agentDef.ProviderID)
 	if err != nil {
 		slog.Error("query agent's provider error", "err", err)
 		return
 	}
 	providerDef.APIKey, _ = a.encryptor.Decrypt(providerDef.APIKey)
-	runner, err := agent.NewApiAgentRunner(agentDef, providerDef, a.bus, a.config, a.sessionRepo, a.cronDeps, a.skillRepo, a.agentRepo, a.providerRepo, a.encryptor, a.mcpManager)
+
+	sessionType := message.SessionType
+	if sessionType == "" {
+		sessionType = types.SessionTypeChat
+	}
+
+	// 生成会话 Key（使用 ChatID）
+	sessionKey := session.GetApiSessionKey(sessionType, agentDef.ID, message.Channel, message.ChatID, message.UserID)
+
+	// 构建 IM 上下文
+	imContext := &types.IMSessionContext{
+		UserID:  message.UserID,
+		GroupID: message.GroupID,
+		ChatID:  message.ChatID,
+	}
+
+	// 创建或加载会话
+	sess, err := session.NewApiSession(
+		a.sessionRepo,
+		sessionKey,
+		agentDef.ID,
+		message.Channel,
+		message.SessionType,
+		cronJobID,
+		imContext,
+		agentDef.ContextMaxTokens,
+		agentDef.CompressionRatio,
+		agentDef.CompressionKeepSize,
+	)
+	if err != nil {
+		slog.Error("create sesssion failed", "error", err)
+		return
+	}
+
+	// 计算会话级 workDir
+	sessionWorkDir, err := session.EnsureSessionWorkDir(agentDef.WorkingDir, sessionKey)
+	if err != nil {
+		slog.Error("create session working dir failed", "error", err)
+		return
+	}
+
+	runner, err := react.NewApiAgentRunner(react.NewReactAgentParam{
+		AgentDef:         agentDef,
+		ProviderDef:      providerDef,
+		Bus:              a.bus,
+		Config:           a.config,
+		SessionRepo:      a.sessionRepo,
+		SkillRepo:        a.skillRepo,
+		CronDeps:         a.cronDeps,
+		AgentRepo:        a.agentRepo,
+		ProviderRepo:     a.providerRepo,
+		Encryptor:        a.encryptor,
+		McpManager:       a.mcpManager,
+		AllowSubAgents:   true,
+		ParentWorkingDir: sessionWorkDir,
+	})
 	if err != nil {
 		slog.Error("create agent runner error", "err", err)
 		return
 	}
 
-	if err := runner.RunWithMessage(ctx, msg); err != nil {
+	if err := runner.RunWithMessage(ctx, sess, message); err != nil {
 		slog.Error("agent loop error", "err", err)
 	}
 }

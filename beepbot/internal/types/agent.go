@@ -2,6 +2,8 @@ package types
 
 import (
 	"time"
+
+	"gorm.io/datatypes"
 )
 
 // AgentStatus 智能体状态
@@ -10,6 +12,12 @@ type AgentStatus string
 const (
 	AgentStatusActive   AgentStatus = "active"
 	AgentStatusInactive AgentStatus = "inactive"
+)
+
+type ExternalType string
+
+const (
+	ExternalTypeDify ExternalType = "dify"
 )
 
 // Agent 智能体配置
@@ -42,8 +50,16 @@ type Agent struct {
 	CallableDescription string `json:"callable_description" gorm:"column:callable_description;type:text"`
 	// EnableMCP 是否启用 MCP 工具
 	EnableMCP bool `json:"enable_mcp" gorm:"column:enable_mcp;type:boolean;default:false"`
-	CreatedAt           time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
-	UpdatedAt           time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
+
+	// External 是否是外部智能体接入
+	External bool `json:"external" gorm:"column:external;type:boolean;default:false"`
+	// ExternalType 外部智能体类型
+	ExternalType ExternalType `json:"external_type" gorm:"column:external_type;type:varchar(32);default:null"`
+	// ExternalConfig 外部智能体接入配置
+	ExternalConfig datatypes.JSON `json:"external_config" gorm:"column:external_type;type:jsonb;default:null"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;type:timestamptz;not null"`
 }
 
 // AgentQuery 智能体查询参数
@@ -59,12 +75,12 @@ func (Agent) TableName() string {
 
 // UsageStatsPoint 单个时间点的统计数据
 type UsageStatsPoint struct {
-	Time          time.Time `json:"time"`
-	SessionCount  int64     `json:"session_count"`
-	MessageCount  int64     `json:"message_count"`
-	InputTokens   int64     `json:"input_tokens"`
-	OutputTokens  int64     `json:"output_tokens"`
-	TotalTokens   int64     `json:"total_tokens"`
+	Time         time.Time `json:"time"`
+	SessionCount int64     `json:"session_count"`
+	MessageCount int64     `json:"message_count"`
+	InputTokens  int64     `json:"input_tokens"`
+	OutputTokens int64     `json:"output_tokens"`
+	TotalTokens  int64     `json:"total_tokens"`
 }
 
 // UsageStatsResponse 用量统计响应
