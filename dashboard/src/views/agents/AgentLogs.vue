@@ -291,7 +291,7 @@ onMounted(() => {
             {{ formatTokenCount(record.total_tokens ?? 0) }}
           </template>
           <template v-else-if="column.key === 'summary'">
-            <a v-if="record.summary" class="summary-link" @click="(e: Event) => showSummaryDetail(record, e)">
+            <a v-if="record.summary" class="summary-link" @click="(e: Event) => showSummaryDetail(record as SessionListItem, e)">
               {{ truncateSummary(record.summary) }}
             </a>
             <span v-else class="summary-empty">-</span>
