@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
@@ -18,6 +19,12 @@ import (
 
 // 工具调用连续出错次数，达到这个次数将提示智能体提前结束或尝试其他方案
 const toolErrorThreshold = 3
+
+const (
+	builtinCommandCompact = "/compact"
+	builtinCommandContext = "/context"
+	builtinCommandClear   = "/clear"
+)
 
 type ReActAgentRunner struct {
 	model        types.LLMProvider
@@ -54,7 +61,11 @@ type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
 // 输入消息来源有IM机器人、定时任务和调用sub-agent
 // 输出hook用来处理不同的消息输出逻辑，IM机器人、定时任务、sub-agent的输出逻辑有区别
 func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage, output OutputHook) {
-
+	// 处理内置命令
+	if ok := a.handleBuiltinCommand(ctx, sess, message); ok {
+		slog.Debug("handle builtin command done, skip agent loop", "command", message.Content)
+		return
+	}
 	channelName, userID, groupID, inboundMsgID := message.Channel, message.UserID, message.GroupID, message.MessageID
 	maxIterations := a.maxIterations
 
@@ -256,32 +267,74 @@ func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, 
 	if a.onLoopFinish != nil {
 		a.onLoopFinish(iterationCount, totalTokenUsage)
 	}
+
+	// 异步更新摘要
+	a.generateSummary(ctx, sess.GetHistory(), sess)
+}
+
+// handleBuiltinCommand 处理内置命令，返回消息是否是内置命令，不是则需要执行智能体循环
+func (a *ReActAgentRunner) handleBuiltinCommand(ctx context.Context, sess session.Session, message channel.InboundMessage) bool {
+	outboundMessage := channel.OutboundMessage{
+		Channel:          message.Channel,
+		UserID:           message.UserID,
+		GroupID:          message.GroupID,
+		ChatID:           message.ChatID,
+		InboundMessageID: message.MessageID,
+		MessageType:      channel.TextMessage,
+	}
+
+	switch message.Content {
+	case builtinCommandCompact: // 压缩上下文
+		before, after := a.compressContext(ctx, sess)
+		outboundMessage.Content = fmt.Sprintf("已压缩上下文, 压缩前: %d tokens, 压缩后: %d tokens, 压缩率: %.1f%%", before, after, float64(after)/float64(before)*100.0)
+		a.bus.PublishOutbound(ctx, outboundMessage)
+		return true
+	case builtinCommandContext: // 查看上下文用量
+		used, max := sess.GetTokenUsage(), sess.GetMaxTokens()
+		outboundMessage.Content = fmt.Sprintf("已用上下文: %d tokens, 使用率: %.1f%%", used, float64(used)/float64(max)*100.0)
+		a.bus.PublishOutbound(ctx, outboundMessage)
+		return true
+	case builtinCommandClear: // 清空消息窗口
+		sess.ClearHistory()
+		outboundMessage.Content = "已清空消息列表"
+		a.bus.PublishOutbound(ctx, outboundMessage)
+		return true
+	default:
+		return false
+	}
 }
 
 // compressContext 压缩会话上下文
-// 1. 获取需要压缩的历史消息
-// 2. 调用 LLM 生成摘要
-// 3. 用摘要替换旧历史
-func (a *ReActAgentRunner) compressContext(ctx context.Context, sess session.Session) {
-	// 获取被移除的消息用于生成摘要
-	removed := sess.Compress()
-	if len(removed) == 0 {
-		return
-	}
+// 1. 生成摘要
+// 2. 压缩消息窗口
+// 返回压缩前的上下文大小和压缩后的上下文大小
+func (a *ReActAgentRunner) compressContext(ctx context.Context, sess session.Session) (before int64, after int64) {
+	before = sess.GetTokenUsage()
+	// 用窗口中的所有消息生成摘要
+	history := sess.GetHistory()
+	// 生成摘要
+	a.generateSummary(ctx, history, sess)
+	// 压缩消息列表
+	sess.Compress()
+	after = sess.GetTokenUsage()
+	return
+}
 
+func (a *ReActAgentRunner) generateSummary(ctx context.Context, history []types.Message, sess session.Session) {
+	genSummaryStartAt := time.Now()
 	// 构建摘要请求
-	var historyText string
-	for _, msg := range removed {
+	var historyText strings.Builder
+	for _, msg := range history {
 		switch msg.Role {
 		case types.RoleUser:
-			historyText += fmt.Sprintf("用户: %s\n", msg.Content)
+			fmt.Fprintf(&historyText, "用户: %s\n", msg.Content)
 		case types.RoleAssistant:
-			historyText += fmt.Sprintf("助手: %s\n", msg.Content)
+			fmt.Fprintf(&historyText, "助手: %s\n", msg.Content)
 			// 处理工具调用
 			if len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
 					if tc.Function != nil {
-						historyText += fmt.Sprintf("  调用工具: %s, 参数: %s\n",
+						fmt.Fprintf(&historyText, "  调用工具: %s, 参数: %s\n",
 							tc.Function.Name,
 							truncateText(tc.Function.Arguments, 200))
 					}
@@ -289,14 +342,15 @@ func (a *ReActAgentRunner) compressContext(ctx context.Context, sess session.Ses
 			}
 		case types.RoleTool:
 			// 工具结果可能很长，需要截断
-			historyText += fmt.Sprintf("工具结果: %s\n", truncateText(msg.Content, 200))
+			fmt.Fprintf(&historyText, "工具结果: %s\n", truncateText(msg.Content, 200))
 		}
 	}
 
 	// 调用 LLM 生成摘要
 	summaryMessages := []types.Message{
-		{Role: types.RoleSystem, Content: compressionPrompt},
-		{Role: types.RoleUser, Content: historyText},
+		{Role: types.RoleSystem, Content: compressionPrompt},                                                         // 压缩提示词
+		{Role: types.RoleSystem, Content: fmt.Sprintf("<last-summary>\n\n%s</last-summary>\n\n", sess.GetSummary())}, // 之前的摘要
+		{Role: types.RoleUser, Content: historyText.String()},                                                        // 历史消息
 	}
 
 	response, err := a.model.Chat(ctx, summaryMessages, a.modelID, types.ChatOptions{})
@@ -308,7 +362,7 @@ func (a *ReActAgentRunner) compressContext(ctx context.Context, sess session.Ses
 
 	// 保存摘要到会话
 	sess.SetSummary(response.Content)
-	slog.Info("context compressed successfully", "summaryLength", len(response.Content))
+	slog.Info("generated session summary", "summaryLength", len(response.Content), "elapsed", time.Since(genSummaryStartAt).String())
 }
 
 // truncateText 截断文本，保留指定最大长度

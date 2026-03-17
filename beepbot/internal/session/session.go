@@ -2,10 +2,6 @@ package session
 
 import "github.com/StellarisJAY/beepbot/internal/types"
 
-// 默认压缩比例阈值，当 tokenUsed 达到 maxTokens * compressionRatio 时触发压缩
-const defaultCompressionRatio = 0.8
-const defaultMaxTokens = 1000000
-
 type Session interface {
 	// AppendMessage 添加历史消息到会话
 	AppendMessage(message types.Message) bool
