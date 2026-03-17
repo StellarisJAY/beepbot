@@ -22,3 +22,4 @@ build
 
 .encryption_key
 .jwt_secret
+.keys

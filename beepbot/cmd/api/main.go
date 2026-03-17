@@ -75,9 +75,7 @@ func main() {
 	logger.InitLogger(cfg.Logging)
 	slog.Info("Starting BeepBot API Server...")
 
-	// 获取配置文件所在目录，用于存储加密密钥
-	configDir := filepath.Dir(configFile)
-	keyFilePath := filepath.Join(configDir, ".encryption_key")
+	keyFilePath := filepath.Join(".keys", ".encryption_key")
 
 	// 初始化加密器
 	encryptionKey, err := crypto.GetOrCreateEncryptionKey(cfg.Encryption.Key, keyFilePath)
@@ -113,7 +111,7 @@ func main() {
 	adminRepo := repository.NewAdminRepository(db)
 
 	// 初始化 JWT 密钥
-	jwtKeyFilePath := filepath.Join(configDir, ".jwt_secret")
+	jwtKeyFilePath := filepath.Join(".keys", ".jwt_secret")
 	jwtSecret, err := getOrCreateJWTSecret(cfg.JWT.Secret, jwtKeyFilePath)
 	if err != nil {
 		panic(fmt.Errorf("failed to initialize JWT secret: %w", err))
