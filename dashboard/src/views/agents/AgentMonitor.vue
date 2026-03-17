@@ -48,51 +48,6 @@ const isHourly = computed(() => {
   return selectedPeriod.value === '1d' || selectedPeriod.value === '3d'
 })
 
-// 会话数量图表配置
-const sessionChartOption = computed(() => {
-  const times = statsData.value.map((p) => formatTime(p.time, isHourly.value))
-  const values = statsData.value.map((p) => p.session_count)
-
-  return {
-    title: {
-      text: '会话数量趋势',
-      left: 'center',
-      textStyle: { fontSize: 14 },
-    },
-    tooltip: {
-      trigger: 'axis',
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true,
-    },
-    xAxis: {
-      type: 'category',
-      data: times,
-      axisLabel: {
-        rotate: isHourly.value ? 45 : 0,
-        fontSize: 10,
-      },
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-    },
-    series: [
-      {
-        name: '会话数',
-        type: 'line',
-        data: values,
-        smooth: true,
-        areaStyle: { opacity: 0.3 },
-        itemStyle: { color: '#1890ff' },
-      },
-    ],
-  }
-})
-
 // 消息数量图表配置
 const messageChartOption = computed(() => {
   const times = statsData.value.map((p) => formatTime(p.time, isHourly.value))
@@ -252,15 +207,6 @@ onMounted(() => {
     <!-- 图表区域 -->
     <a-spin :spinning="loading">
       <div class="charts-grid">
-        <!-- 会话数量图表 -->
-        <div class="chart-card">
-          <v-chart
-            :option="sessionChartOption"
-            autoresize
-            style="height: 280px"
-          />
-        </div>
-
         <!-- 消息数量图表 -->
         <div class="chart-card">
           <v-chart
@@ -271,11 +217,11 @@ onMounted(() => {
         </div>
 
         <!-- Token 用量图表 -->
-        <div class="chart-card full-width">
+        <div class="chart-card">
           <v-chart
             :option="tokenChartOption"
             autoresize
-            style="height: 320px"
+            style="height: 280px"
           />
         </div>
       </div>
@@ -296,8 +242,8 @@ onMounted(() => {
 }
 
 .charts-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 24px;
 }
 
@@ -306,19 +252,5 @@ onMounted(() => {
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-}
-
-.chart-card.full-width {
-  grid-column: span 2;
-}
-
-@media (max-width: 1024px) {
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-card.full-width {
-    grid-column: span 1;
-  }
 }
 </style>

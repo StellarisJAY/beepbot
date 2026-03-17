@@ -225,8 +225,8 @@ type AgentResponse struct {
 	ExternalType string `json:"external_type,omitempty"`
 	// ExternalConfig 外部智能体配置（API Key 脱敏）
 	ExternalConfig map[string]any `json:"external_config,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 // CreateAgent 创建智能体
@@ -767,22 +767,28 @@ func (s *AgentService) GetUsageStats(agentID string, period string) (*types.Usag
 	switch period {
 	case "1d":
 		startTime = now.Add(-24 * time.Hour)
+		now = now.Add(time.Hour)
 		groupByHour = true
 	case "3d":
 		startTime = now.Add(-3 * 24 * time.Hour)
+		now = now.Add(time.Hour)
 		groupByHour = true
 	case "7d":
 		startTime = now.Add(-7 * 24 * time.Hour)
+		now = now.Add(24 * time.Hour)
 		groupByHour = false
 	case "14d":
 		startTime = now.Add(-14 * 24 * time.Hour)
+		now = now.Add(24 * time.Hour)
 		groupByHour = false
 	case "30d":
 		startTime = now.Add(-30 * 24 * time.Hour)
+		now = now.Add(24 * time.Hour)
 		groupByHour = false
 	default:
 		// 默认7天
 		startTime = now.Add(-7 * 24 * time.Hour)
+		now = now.Add(24 * time.Hour)
 		groupByHour = false
 	}
 

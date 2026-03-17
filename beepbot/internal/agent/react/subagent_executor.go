@@ -27,29 +27,6 @@ type SubAgentExecutor struct {
 	mcpManager   *mcp.Manager                  // MCP管理器
 }
 
-// NewSubAgentExecutor 创建子智能体执行器
-func NewSubAgentExecutor(
-	config config.APIConfig,
-	skillRepo repository.SkillRepository,
-	agentRepo repository.AgentRepository,
-	providerRepo repository.ProviderRepository,
-	encryptor *crypto.Encryptor,
-	cronDeps *tool.CronToolDeps,
-	bus *channel.MessageBus,
-	mcpManager *mcp.Manager,
-) *SubAgentExecutor {
-	return &SubAgentExecutor{
-		config:       config,
-		skillRepo:    skillRepo,
-		agentRepo:    agentRepo,
-		providerRepo: providerRepo,
-		encryptor:    encryptor,
-		cronDeps:     cronDeps,
-		bus:          bus,
-		mcpManager:   mcpManager,
-	}
-}
-
 // Execute 执行子智能体
 // parentWorkingDir: 父智能体的工作目录，子智能体将继承此目录
 func (e *SubAgentExecutor) Execute(ctx context.Context, agentDef *types.Agent, providerDef *types.Provider, message string, parentWorkingDir string) (string, error) {
@@ -57,7 +34,6 @@ func (e *SubAgentExecutor) Execute(ctx context.Context, agentDef *types.Agent, p
 
 	// 创建子智能体运行器（不注册 Sub-Agent 工具，防止递归）
 	// 使用父智能体的工作目录
-	// mcpManager=nil，子智能体不继承 MCP 工具（避免重复注册）
 	runner, err := NewApiAgentRunner(NewReactAgentParam{
 		AgentDef:         agentDef,
 		ProviderDef:      providerDef,

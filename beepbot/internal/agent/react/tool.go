@@ -61,17 +61,16 @@ func registerTools(toolRegistry *tool.ToolRegistry, params toolRegistrationParam
 	// 注册 Sub-Agent 工具（仅当 allowSubAgents 为 true 时）
 	if params.allowSubAgents && params.agentRepo != nil && params.providerRepo != nil && params.encryptor != nil {
 		// 创建子智能体执行器
-		executor := NewSubAgentExecutor(
-			params.config,
-			params.skillRepo,
-			params.agentRepo,
-			params.providerRepo,
-			params.encryptor,
-			params.cronDeps,
-			params.bus,
-			params.mcpManager,
-		)
-
+		executor := &SubAgentExecutor{
+			config:       params.config,
+			skillRepo:    params.skillRepo,
+			agentRepo:    params.agentRepo,
+			providerRepo: params.providerRepo,
+			encryptor:    params.encryptor,
+			cronDeps:     params.cronDeps,
+			bus:          params.bus,
+			mcpManager:   params.mcpManager,
+		}
 		// 查询所有能够被调用的智能体，每个智能体创建单独的sub-agent工具
 		callableAgents, err := params.agentRepo.GetCallableAgents()
 		if err == nil {
