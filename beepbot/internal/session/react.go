@@ -15,24 +15,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// ApiSession API 模式会话实现，基于数据库持久化
-type ApiSession struct {
-	sessionID string
-	key       string
-	agentID   string // 智能体 ID，用于生成会话 Key
+// ReActSession ReAct智能体会话实现，基于数据库持久化
+type ReActSession struct {
+	sessionID           string
+	key                 string
+	agentID             string                  // 智能体 ID，用于生成会话 Key
+	maxTokens           int64                   // 上下文最大token数量
+	compressionRatio    float64                 // 触发压缩的窗口阈值
+	compressionKeepSize int                     // 压缩后保留的消息条数
+	contextTokens       int64                   // 当前上下文 token 大小（最后一次 LLM 调用的 InputTokens）
+	needCompress        bool                    // 是否需要压缩标记
+	summary             string                  // 会话摘要
+	cronJobID           *string                 // 定时任务 ID
+	imContext           *types.IMSessionContext // IM 会话上下文
 
-	maxTokens           int64
-	compressionRatio    float64
-	compressionKeepSize int
-
-	contextTokens int64 // 当前上下文 token 大小（最后一次 LLM 调用的 InputTokens）
-	needCompress  bool
-	summary       string
-
-	cronJobID *string                 // 定时任务 ID
-	imContext *types.IMSessionContext // IM 会话上下文
-
-	repo  repository.SessionRepository
+	repo  repository.SessionRepository // 会话数据库
 	mutex *sync.RWMutex
 }
 
@@ -48,7 +45,7 @@ func NewApiSession(
 	maxTokens int64,
 	compressionRatio float64,
 	compressionKeepSize int,
-) (*ApiSession, error) {
+) (*ReActSession, error) {
 	// 尝试获取现有会话
 	session, err := repo.GetSessionByKey(key)
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -70,7 +67,7 @@ func NewApiSession(
 		}
 	}
 
-	return &ApiSession{
+	return &ReActSession{
 		sessionID:           session.ID,
 		key:                 key,
 		agentID:             agentID,
@@ -88,7 +85,7 @@ func NewApiSession(
 
 // AppendMessage 添加消息到会话历史
 // 返回是否需要压缩上下文
-func (s *ApiSession) AppendMessage(message types.Message) bool {
+func (s *ReActSession) AppendMessage(message types.Message) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -119,7 +116,7 @@ func (s *ApiSession) AppendMessage(message types.Message) bool {
 }
 
 // GetHistory 获取会话历史消息（只返回窗口内消息）
-func (s *ApiSession) GetHistory() []types.Message {
+func (s *ReActSession) GetHistory() []types.Message {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -137,21 +134,21 @@ func (s *ApiSession) GetHistory() []types.Message {
 }
 
 // GetSummary 获取会话摘要
-func (s *ApiSession) GetSummary() string {
+func (s *ReActSession) GetSummary() string {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.summary
 }
 
 // NeedCompress 返回是否需要压缩上下文
-func (s *ApiSession) NeedCompress() bool {
+func (s *ReActSession) NeedCompress() bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.needCompress
 }
 
 // SetSummary 设置会话摘要，并清除压缩标记
-func (s *ApiSession) SetSummary(summary string) {
+func (s *ReActSession) SetSummary(summary string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.summary = summary
@@ -164,7 +161,7 @@ func (s *ApiSession) SetSummary(summary string) {
 }
 
 // ClearHistory 清空历史消息（标记所有窗口内消息为窗口外）
-func (s *ApiSession) ClearHistory() {
+func (s *ReActSession) ClearHistory() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -195,33 +192,14 @@ func (s *ApiSession) ClearHistory() {
 // Compress 压缩历史消息，保留最近的消息
 // 使用 compressionKeepSize 作为保留数量
 // 返回被移除的消息，用于生成摘要
-func (s *ApiSession) Compress() []types.Message {
+func (s *ReActSession) Compress() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// 获取窗口内所有消息
-	messages, err := s.repo.GetMessagesInWindow(s.sessionID, 0)
-	if err != nil {
-		slog.Error("failed to get messages for compression", "sessionID", s.sessionID, "error", err)
-		return nil
-	}
-
-	keepCount := s.compressionKeepSize
-	if keepCount <= 0 {
-		keepCount = 5 // 默认保留 5 条
-	}
-
-	if len(messages) <= keepCount {
-		return nil
-	}
-
-	// 计算需要淘汰的消息数量
-	evictCount := len(messages) - keepCount
-
 	// 标记旧消息为窗口外
-	if err := s.repo.EvictOldestMessagesInWindow(s.sessionID, evictCount); err != nil {
+	if err := s.repo.EvictMessagesInWindow(s.sessionID); err != nil {
 		slog.Error("failed to evict old messages during compression", "sessionID", s.sessionID, "error", err)
-		return nil
+		return
 	}
 
 	// 压缩后重置上下文 token 大小，下次 LLM 调用会更新准确值
@@ -229,29 +207,22 @@ func (s *ApiSession) Compress() []types.Message {
 	if err := s.repo.UpdateSessionContextTokens(s.sessionID, 0); err != nil {
 		slog.Error("failed to reset context tokens after compression", "sessionID", s.sessionID, "error", err)
 	}
-
-	// 返回被淘汰的消息（用于生成摘要）
-	removed := make([]types.Message, 0, evictCount)
-	for i := 0; i < evictCount; i++ {
-		removed = append(removed, s.convertToMessage(messages[i]))
-	}
-	return removed
 }
 
 // GetTokenUsage 返回当前上下文 token 大小
-func (s *ApiSession) GetTokenUsage() int64 {
+func (s *ReActSession) GetTokenUsage() int64 {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.contextTokens
 }
 
 // GetMaxTokens 返回 token 上限
-func (s *ApiSession) GetMaxTokens() int64 {
+func (s *ReActSession) GetMaxTokens() int64 {
 	return s.maxTokens
 }
 
 // GetSessionKey 生成会话 Key
-func (s *ApiSession) GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string {
+func (s *ReActSession) GetSessionKey(sessionType types.SessionType, channelID string, chatID string, userID string) string {
 	return GetApiSessionKey(sessionType, s.agentID, channelID, chatID, userID)
 }
 
@@ -265,19 +236,19 @@ func GetApiSessionKey(sessionType types.SessionType, agentID string, channelID s
 }
 
 // GetSessionID 返回会话 ID
-func (s *ApiSession) GetSessionID() string {
+func (s *ReActSession) GetSessionID() string {
 	return s.sessionID
 }
 
 // GetCronJobID 返回定时任务 ID
-func (s *ApiSession) GetCronJobID() *string {
+func (s *ReActSession) GetCronJobID() *string {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.cronJobID
 }
 
 // GetIMContext 返回 IM 会话上下文
-func (s *ApiSession) GetIMContext() *types.IMSessionContext {
+func (s *ReActSession) GetIMContext() *types.IMSessionContext {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.imContext
@@ -301,7 +272,7 @@ func EnsureSessionWorkDir(baseWorkDir string, sessionKey string) (string, error)
 }
 
 // convertToSessionMessage 将 types.Message 转换为 types.SessionMessage
-func (s *ApiSession) convertToSessionMessage(msg types.Message) *types.SessionMessage {
+func (s *ReActSession) convertToSessionMessage(msg types.Message) *types.SessionMessage {
 	toolCallsJSON, _ := json.Marshal(msg.ToolCalls)
 
 	var inputTokens, outputTokens, totalTokens int64
@@ -325,7 +296,7 @@ func (s *ApiSession) convertToSessionMessage(msg types.Message) *types.SessionMe
 }
 
 // convertToMessage 将 types.SessionMessage 转换为 types.Message
-func (s *ApiSession) convertToMessage(msg types.SessionMessage) types.Message {
+func (s *ReActSession) convertToMessage(msg types.SessionMessage) types.Message {
 	var toolCalls []types.ToolCall
 	if msg.ToolCalls != "" {
 		if err := json.Unmarshal([]byte(msg.ToolCalls), &toolCalls); err != nil {

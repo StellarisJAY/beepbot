@@ -118,9 +118,7 @@ func (s *ExternalSession) ClearHistory() {}
 // Compress 压缩历史消息，保留最近的消息
 // 使用 compressionKeepSize 作为保留数量
 // 返回被移除的消息，用于生成摘要
-func (s *ExternalSession) Compress() []types.Message {
-	return []types.Message{}
-}
+func (s *ExternalSession) Compress() {}
 
 // GetTokenUsage 返回当前上下文 token 大小
 func (s *ExternalSession) GetTokenUsage() int64 {

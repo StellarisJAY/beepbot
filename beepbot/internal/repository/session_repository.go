@@ -47,7 +47,7 @@ type SessionRepository interface {
 	GetOldestMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
 	GetMessagesInWindow(sessionID string, limit int) ([]types.SessionMessage, error)
 	EvictMessages(sessionID string, messageIDs []string) error
-	EvictOldestMessagesInWindow(sessionID string, count int) error
+	EvictMessagesInWindow(sessionID string) error
 }
 
 // SessionRepositoryImpl 会话仓储实现
@@ -346,23 +346,9 @@ func (r *SessionRepositoryImpl) EvictMessages(sessionID string, messageIDs []str
 		Update("in_window", false).Error
 }
 
-// EvictOldestMessagesInWindow 标记窗口内最早的 N 条消息为窗口外
-func (r *SessionRepositoryImpl) EvictOldestMessagesInWindow(sessionID string, count int) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var ids []string
-		err := tx.Model(&types.SessionMessage{}).
-			Where("session_id = ? AND in_window = ?", sessionID, true).
-			Order("created_at ASC").
-			Limit(count).
-			Pluck("id", &ids).Error
-		if err != nil {
-			return err
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-		return tx.Model(&types.SessionMessage{}).
-			Where("id IN ?", ids).
-			Update("in_window", false).Error
-	})
+// EvictMessagesInWindow 将所有窗口中的消息淘汰掉
+func (r *SessionRepositoryImpl) EvictMessagesInWindow(sessionID string) error {
+	return r.db.Model(&types.SessionMessage{}).
+		Where("session_id = ?", sessionID).
+		Update("in_window", false).Error
 }

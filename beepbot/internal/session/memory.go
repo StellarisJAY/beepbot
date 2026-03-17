@@ -66,9 +66,7 @@ func (s *InMemorySession) ClearHistory() {
 }
 
 // Compress 内存会话不支持压缩
-func (s *InMemorySession) Compress() []types.Message {
-	return nil
-}
+func (s *InMemorySession) Compress() {}
 
 // GetTokenUsage 返回当前 token 用量（内存会话不追踪）
 func (s *InMemorySession) GetTokenUsage() int64 {

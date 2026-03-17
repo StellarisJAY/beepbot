@@ -4,13 +4,12 @@ import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
   PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
   RobotOutlined,
-  FileTextOutlined,
-  LineChartOutlined,
   SearchOutlined,
   ReloadOutlined,
+  MoreOutlined,
+  DeleteOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 import { agentApi, type AgentFilter } from '@/api/agent'
 import type { Agent } from '@/types/agent'
@@ -78,23 +77,14 @@ const handleCreateSuccess = (id: string) => {
   router.push(`/agents/${id}/edit`)
 }
 
-// 编辑智能体
-const handleEdit = (id: string) => {
+// 点击卡片进入编辑页
+const handleCardClick = (id: string) => {
   router.push(`/agents/${id}/edit`)
 }
 
-// 查看日志
-const handleLogs = (id: string) => {
-  router.push(`/agents/${id}/logs`)
-}
-
-// 查看监测
-const handleMonitor = (id: string) => {
-  router.push(`/agents/${id}/monitor`)
-}
-
 // 删除智能体
-const handleDelete = (agent: Agent) => {
+const handleDelete = (agent: Agent, e?: Event) => {
+  e?.stopPropagation()
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除智能体「${agent.name}」吗？`,
@@ -115,7 +105,8 @@ const handleDelete = (agent: Agent) => {
 }
 
 // 切换状态
-const handleToggleStatus = async (agent: Agent) => {
+const handleToggleStatus = async (agent: Agent, e?: Event) => {
+  e?.stopPropagation()
   // 如果要启用，先校验配置是否完整
   if (agent.status !== AgentStatus.Active) {
     try {
@@ -147,6 +138,11 @@ const handlePageChange = (p: number, s: number) => {
   page.value = p
   size.value = s
   fetchAgents()
+}
+
+// 阻止下拉菜单点击冒泡
+const handleDropdownClick = (e: Event) => {
+  e.stopPropagation()
 }
 
 onMounted(() => {
@@ -194,7 +190,13 @@ onMounted(() => {
 
     <a-spin :spinning="loading">
       <div class="card-grid" v-if="agents.length > 0">
-        <a-card v-for="agent in agents" :key="agent.id" class="agent-card" hoverable>
+        <a-card
+          v-for="agent in agents"
+          :key="agent.id"
+          class="agent-card"
+          hoverable
+          @click="handleCardClick(agent.id)"
+        >
           <template #title>
             <div class="card-title">
               <RobotOutlined class="card-icon" />
@@ -206,30 +208,29 @@ onMounted(() => {
               :checked="agent.status === AgentStatus.Active"
               checked-children="启用"
               un-checked-children="禁用"
-              @change="handleToggleStatus(agent)"
+              @change="handleToggleStatus(agent, $event)"
             />
           </template>
           <p class="card-description">{{ agent.description || '暂无描述' }}</p>
-          <div class="card-meta">
-            <div class="meta-item">
-              <span class="meta-label">模型:</span>
-              <span class="meta-value">{{ agent.model || '未配置' }}</span>
+          <div class="card-footer">
+            <div class="card-meta" v-if="agent.callable">
+              <CheckCircleOutlined class="callable-icon" />
+              <span class="callable-text active">可作为子智能体</span>
             </div>
+            <a-dropdown :trigger="['click']" @click.stop="handleDropdownClick">
+              <a-button class="more-btn" @click.stop>
+                <MoreOutlined />
+              </a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item key="delete" danger @click="handleDelete(agent, $event)">
+                    <DeleteOutlined />
+                    <span>删除</span>
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
           </div>
-          <template #actions>
-            <a-tooltip title="编辑">
-              <EditOutlined @click="handleEdit(agent.id)" />
-            </a-tooltip>
-            <a-tooltip title="日志">
-              <FileTextOutlined @click="handleLogs(agent.id)" />
-            </a-tooltip>
-            <a-tooltip title="监测">
-              <LineChartOutlined @click="handleMonitor(agent.id)" />
-            </a-tooltip>
-            <a-tooltip title="删除">
-              <DeleteOutlined @click="handleDelete(agent)" />
-            </a-tooltip>
-          </template>
         </a-card>
       </div>
 
@@ -299,25 +300,12 @@ onMounted(() => {
   border: 1px solid var(--card-border);
   background: var(--card-bg);
   transition: all 0.3s ease;
+  cursor: pointer;
 }
 
 .agent-card:hover {
   box-shadow: var(--card-hover-shadow);
   transform: translateY(-2px);
-}
-
-/* 卡片操作按钮样式 */
-.agent-card :deep(.ant-card-actions) {
-  border-top: 1px solid var(--border-color);
-}
-
-.agent-card :deep(.ant-card-actions > li) {
-  color: var(--card-action-color);
-  transition: color 0.3s ease;
-}
-
-.agent-card :deep(.ant-card-actions > li:hover) {
-  color: var(--card-action-hover-color);
 }
 
 .card-title {
@@ -340,24 +328,43 @@ onMounted(() => {
   min-height: 44px;
 }
 
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
 .card-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
+  align-items: center;
+  gap: 6px;
 }
 
-.meta-item {
-  display: flex;
-  gap: 4px;
+.callable-icon {
+  color: var(--color-primary);
+  font-size: 14px;
 }
 
-.meta-label {
-  color: var(--text-tertiary);
+.callable-text.active {
+  font-size: 13px;
+  color: var(--color-primary);
 }
 
-.meta-value {
+.more-btn {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: none !important;
+  background: transparent !important;
   color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.more-btn:hover {
+  color: var(--color-primary) !important;
+  background: var(--hover-bg) !important;
 }
 
 .pagination-container {

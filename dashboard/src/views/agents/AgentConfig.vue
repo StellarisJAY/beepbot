@@ -28,6 +28,9 @@ const saving = ref(false)
 // 表单数据
 const form = ref<UpdateAgentRequest>({})
 
+// 压缩比例百分比（用于界面显示，10-100）
+const compressionRatioPercent = ref<number>(70)
+
 // 技能选项（用于选择器）
 const skillOptions = computed(() => {
   return allSkills.value
@@ -91,7 +94,6 @@ const initForm = () => {
       max_output_tokens: agent.value.max_output_tokens,
       working_dir: agent.value.working_dir,
       compression_ratio: agent.value.compression_ratio,
-      compression_keep_size: agent.value.compression_keep_size,
       context_max_tokens: agent.value.context_max_tokens,
       status: agent.value.status,
       use_all_skills: agent.value.use_all_skills,
@@ -102,6 +104,8 @@ const initForm = () => {
       callable_description: agent.value.callable_description,
       enable_mcp: agent.value.enable_mcp,
     }
+    // 将小数转换为百分比显示
+    compressionRatioPercent.value = Math.round(agent.value.compression_ratio * 100)
   }
 }
 
@@ -131,7 +135,12 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    await agentApi.update(agentId!.value, form.value)
+    // 将百分比转换为小数传给后端
+    const submitData = {
+      ...form.value,
+      compression_ratio: compressionRatioPercent.value / 100,
+    }
+    await agentApi.update(agentId!.value, submitData)
     message.success('保存成功')
     if (fetchAgent) {
       await fetchAgent()
@@ -373,22 +382,27 @@ onMounted(() => {
     <a-card title="上下文配置" size="small" class="config-card">
       <a-form :label-col="{ span: 8 }" :wrapper-col="{ span: 16 }">
         <a-form-item label="压缩比例">
-          <a-input-number
-            v-model:value="form.compression_ratio"
-            :min="0"
-            :max="1"
-            :step="0.1"
-            :precision="2"
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item label="压缩保留数量">
-          <a-input-number
-            v-model:value="form.compression_keep_size"
-            :min="1"
-            :max="100"
-            style="width: 100%"
-          />
+          <a-row :gutter="16">
+            <a-col :span="18">
+              <a-slider
+                v-model:value="compressionRatioPercent"
+                :min="10"
+                :max="100"
+                :step="1"
+              />
+            </a-col>
+            <a-col :span="6">
+              <a-input-number
+                v-model:value="compressionRatioPercent"
+                :min="10"
+                :max="100"
+                :step="1"
+                :formatter="(value: number) => `${value}%`"
+                :parser="(value: string) => value.replace('%', '')"
+                size="small"
+              />
+            </a-col>
+          </a-row>
         </a-form-item>
         <a-form-item label="最大上下文Token">
           <a-input-number

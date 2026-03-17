@@ -22,8 +22,7 @@ type Session interface {
 	ClearHistory()
 
 	// Compress 压缩历史消息，使用配置的 compressionKeepSize 保留数量
-	// 返回被淘汰的消息，用于生成摘要
-	Compress() []types.Message
+	Compress()
 
 	// GetTokenUsage 返回当前 token 用量
 	GetTokenUsage() int64

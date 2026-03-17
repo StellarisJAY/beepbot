@@ -197,7 +197,7 @@ type AgentResponse struct {
 	Provider            *ProviderResponse `json:"provider,omitempty"`
 	Model               string            `json:"model"`
 	SystemPrompt        string            `json:"system_prompt"`
-	Temperature         float32           `json:"temperature"`
+	Temperature         *float32          `json:"temperature"`
 	MaxIterations       int               `json:"max_iterations"`
 	MaxOutputTokens     int64             `json:"max_output_tokens"`
 	WorkingDir          string            `json:"working_dir"`
@@ -273,9 +273,12 @@ func (s *AgentService) CreateAgent(req *CreateAgentRequest) (*types.Agent, error
 		workingDir = fmt.Sprintf("/data/agents/%s", agentID)
 	}
 
-	temperature := req.Temperature
-	if temperature == 0 {
-		temperature = defaults.Temperature
+	var temperature *float32
+	if req.Temperature != 0 {
+		temperature = &req.Temperature
+	} else {
+		t := float32(defaults.Temperature)
+		temperature = &t
 	}
 	maxIterations := req.MaxIterations
 	if maxIterations == 0 {
@@ -396,7 +399,7 @@ func (s *AgentService) UpdateAgent(id string, req *UpdateAgentRequest) (*types.A
 	}
 
 	if req.Temperature != 0 {
-		agent.Temperature = req.Temperature
+		agent.Temperature = &req.Temperature
 	}
 
 	if req.MaxIterations != 0 {

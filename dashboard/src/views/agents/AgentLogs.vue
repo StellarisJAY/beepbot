@@ -22,6 +22,10 @@ const pagination = ref({
   total: 0,
 })
 
+// 摘要详情弹窗
+const summaryModalVisible = ref(false)
+const currentSummary = ref('')
+
 // 筛选条件
 const filters = ref<SessionFilter>({
   session_type: undefined,
@@ -191,6 +195,20 @@ const handleRowClick = (record: SessionListItem) => {
   })
 }
 
+// 显示摘要详情
+const showSummaryDetail = (record: SessionListItem, event: Event) => {
+  event.stopPropagation() // 阻止行点击事件
+  currentSummary.value = record.summary || '暂无摘要'
+  summaryModalVisible.value = true
+}
+
+// 截断摘要显示
+const truncateSummary = (summary: string | null | undefined): string => {
+  if (!summary) return ''
+  if (summary.length <= 20) return summary
+  return summary.slice(0, 20) + '...'
+}
+
 onMounted(() => {
   fetchSessions()
 })
@@ -273,7 +291,10 @@ onMounted(() => {
             {{ formatTokenCount(record.total_tokens ?? 0) }}
           </template>
           <template v-else-if="column.key === 'summary'">
-            {{ record.summary || '-' }}
+            <a v-if="record.summary" class="summary-link" @click="(e: Event) => showSummaryDetail(record, e)">
+              {{ truncateSummary(record.summary) }}
+            </a>
+            <span v-else class="summary-empty">-</span>
           </template>
           <template v-else-if="column.key === 'updated_at'">
             {{ formatTime(record.updated_at) }}
@@ -284,6 +305,18 @@ onMounted(() => {
         </template>
       </Table>
     </Card>
+
+    <!-- 摘要详情弹窗 -->
+    <Modal
+      v-model:open="summaryModalVisible"
+      title="会话摘要"
+      :footer="null"
+      width="600px"
+    >
+      <div class="summary-content">
+        {{ currentSummary }}
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -300,5 +333,30 @@ onMounted(() => {
   background: var(--card-bg);
   border-radius: 8px;
   border: 1px solid var(--border-color);
+}
+
+.summary-link {
+  color: #1890ff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.summary-link:hover {
+  color: #40a9ff;
+  text-decoration: underline;
+}
+
+.summary-empty {
+  color: var(--text-color-secondary, #999);
+}
+
+.summary-content {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

@@ -104,11 +104,12 @@ func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, 
 
 	// 上下文构建器
 	contextBuilder := contextBuilder{
-		systemPrompt:    a.systemPrompt,  // 用户配置的系统提示词
-		skillManager:    a.skillManager,  // 技能信息
-		session:         sess,            // 会话信息
-		workingDir:      a.workingDir,    // 工作目录
-		userInstruction: message.Content, // 用户请求
+		systemPrompt:    a.systemPrompt,                               // 用户配置的系统提示词
+		skillManager:    a.skillManager,                               // 技能信息
+		session:         sess,                                         // 会话信息
+		workingDir:      a.workingDir,                                 // 工作目录
+		userInstruction: message.Content,                              // 用户请求
+		cronJob:         message.SessionType == types.SessionTypeCron, // 是否是定时任务触发
 	}
 
 	sess.AppendMessage(types.Message{
