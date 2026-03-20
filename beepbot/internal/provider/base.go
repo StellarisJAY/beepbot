@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -17,7 +18,32 @@ type BaseProvider struct {
 	defaultModel string
 }
 
-func CreateLLMProviderFromApi(provider *types.Provider, model string) (types.LLMProvider, error) {
+type Stream struct {
+	outChan chan types.LLMResponse
+	errChan chan error
+}
+
+func NewStream() *Stream {
+	return &Stream{
+		outChan: make(chan types.LLMResponse),
+		errChan: make(chan error),
+	}
+}
+
+func (s *Stream) Err() chan error {
+	return s.errChan
+}
+
+func (s *Stream) Output() chan types.LLMResponse {
+	return s.outChan
+}
+
+type LLMProvider interface {
+	Chat(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*types.LLMResponse, error)
+	Stream(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*Stream, error)
+}
+
+func CreateLLMProviderFromApi(provider *types.Provider, model string) (LLMProvider, error) {
 	providerType := provider.ProviderType
 	model = strings.ToLower(model)
 	apiKey := provider.APIKey

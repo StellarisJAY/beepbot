@@ -3,6 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
+	"slices"
+	"strings"
 
 	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/openai/openai-go/v3"
@@ -15,7 +18,7 @@ type OpenAIProvider struct {
 	client openai.Client
 }
 
-func NewOpenAIProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
+func NewOpenAIProvider(apiKey, baseURL, defaultModel string) LLMProvider {
 	client := openai.NewClient(option.WithBaseURL(baseURL), option.WithAPIKey(apiKey))
 	return &OpenAIProvider{
 		BaseProvider: BaseProvider{
@@ -59,6 +62,109 @@ func (d *OpenAIProvider) Chat(ctx context.Context, messages []types.Message, mod
 	response.FinishReason = convertOpenAIFinishReason(result.Choices[0].FinishReason)
 	response.Content = result.Choices[0].Message.Content
 	return response, nil
+}
+
+func (d *OpenAIProvider) Stream(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*Stream, error) {
+	params := buildOpenAICompletionsParams(messages, model, options)
+	// stream模式需要打开用量统计
+	params.StreamOptions.IncludeUsage = openai.Opt(true)
+	stream := d.client.Chat.Completions.NewStreaming(ctx, params)
+	result := NewStream()
+	go func() {
+		defer stream.Close()
+		if stream.Err() != nil {
+			result.errChan <- stream.Err()
+			return
+		}
+
+		// 用于累积工具调用，key 是 index
+		toolCallBuilders := make(map[int64]*struct {
+			id        string
+			name      string
+			arguments strings.Builder
+		})
+
+		for stream.Next() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			current := stream.Current()
+			response := types.LLMResponse{}
+			// 记录token用量
+			response.Usage = &types.TokenUsage{
+				InputTokens:     current.Usage.PromptTokens,
+				OutputTokens:    current.Usage.CompletionTokens,
+				TotalTokens:     current.Usage.TotalTokens,
+				CacheTokens:     current.Usage.PromptTokensDetails.CachedTokens,
+				ReasoningTokens: current.Usage.CompletionTokensDetails.ReasoningTokens,
+			}
+			if len(current.Choices) == 0 {
+				result.outChan <- response
+				continue
+			}
+			// 处理工具调用增量
+			for _, tc := range current.Choices[0].Delta.ToolCalls {
+				index := tc.Index
+				builder, exists := toolCallBuilders[index]
+				if !exists {
+					builder = &struct {
+						id        string
+						name      string
+						arguments strings.Builder
+					}{}
+					toolCallBuilders[index] = builder
+				}
+
+				// 累积 ID（通常只在第一个 chunk 出现）
+				if tc.ID != "" {
+					builder.id = tc.ID
+				}
+				// 累积函数名（通常只在第一个 chunk 出现）
+				if tc.Function.Name != "" {
+					builder.name = tc.Function.Name
+				}
+				// 累积参数片段
+				if tc.Function.Arguments != "" {
+					builder.arguments.WriteString(tc.Function.Arguments)
+				}
+			}
+
+			response.FinishReason = convertOpenAIFinishReason(current.Choices[0].FinishReason)
+			response.Content = current.Choices[0].Delta.Content
+			result.outChan <- response
+		}
+
+		// 流结束，构建完整的工具调用列表
+		finalResponse := types.LLMResponse{}
+		// 按 index 顺序排序工具调用
+		indices := make([]int64, 0, len(toolCallBuilders))
+		for idx := range toolCallBuilders {
+			indices = append(indices, idx)
+		}
+		slices.Sort(indices)
+		for _, idx := range indices {
+			builder := toolCallBuilders[idx]
+			finalResponse.ToolCalls = append(finalResponse.ToolCalls, types.ToolCall{
+				ID:   builder.id,
+				Type: "function",
+				Function: &types.FunctionCall{
+					Name:      builder.name,
+					Arguments: builder.arguments.String(),
+				},
+			})
+		}
+		// 发送包含完整工具调用的最终响应
+		if len(finalResponse.ToolCalls) > 0 {
+			result.outChan <- finalResponse
+		}
+
+		// 结束，发送一个EOF信号
+		result.errChan <- io.EOF
+	}()
+
+	return result, nil
 }
 
 // convertOpenAIFinishReason 将 OpenAI 的 finish_reason 转换为统一的 FinishReason

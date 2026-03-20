@@ -9,6 +9,7 @@ import {
   ClockCircleOutlined,
   BookOutlined,
   CloudServerOutlined,
+  TeamOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -31,6 +32,11 @@ const menuItems = [
     key: '/bots',
     icon: MessageOutlined,
     title: 'IM机器人',
+  },
+  {
+    key: '/teams',
+    icon: TeamOutlined,
+    title: '团队管理',
   },
   {
     key: '/crons',

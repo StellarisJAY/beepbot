@@ -1,11 +1,7 @@
 package react
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/session"
@@ -154,16 +150,6 @@ func (b *contextBuilder) prebuild() {
 // 上下文组织核心点：为保证缓存命中，不变的信息靠前，变化的信息靠后。
 func (b *contextBuilder) buildContext() []types.Message {
 	messages := b.prebuiltMessages
-
-	// 如果有记忆文件，将前两百行加入到上下文
-	memoryFilePath := filepath.Join(b.workingDir, memoryFile)
-	if memoryContent, overflow, err := readMemoryFile(memoryFilePath, 200); err == nil && memoryContent != "" {
-		messages = append(messages, types.Message{
-			Role:    types.RoleSystem,
-			Content: fmt.Sprintf("<memory>\n\n%s</memory>\n\n<memory_overflow>\n\n%v</memory_overflow>\n\n", memoryContent, overflow),
-		})
-	}
-
 	// 如果有摘要，添加摘要作为上下文
 	summary := b.session.GetSummary()
 	if summary != "" {
@@ -190,33 +176,4 @@ func (b *contextBuilder) buildContext() []types.Message {
 		Content: fmt.Sprintf("<system_time>%s</system_time>\n\n", time.Now().Format(time.DateTime)),
 	})
 	return messages
-}
-
-// readMemoryFile 读取记忆文件的前 maxLines 行
-// 返回: 读取的内容, 是否溢出(超过 maxLines), 错误
-func readMemoryFile(path string, maxLines int) (string, bool, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", false, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	var lines []string
-	lineCount := 0
-
-	for scanner.Scan() {
-		if lineCount < maxLines {
-			lines = append(lines, scanner.Text())
-		}
-		lineCount++
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", false, err
-	}
-
-	// 如果总行数超过 maxLines，则表示溢出
-	overflow := lineCount > maxLines
-	return strings.Join(lines, "\n"), overflow, nil
 }

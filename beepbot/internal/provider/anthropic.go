@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/StellarisJAY/beepbot/internal/types"
 	"github.com/anthropics/anthropic-sdk-go"
@@ -17,7 +18,7 @@ type AnthropicProvider struct {
 	client anthropic.Client
 }
 
-func NewAnthropicProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
+func NewAnthropicProvider(apiKey, baseURL, defaultModel string) LLMProvider {
 	if baseURL == "" {
 		baseURL = AnthropicDefaultBaseURL
 	}
@@ -50,6 +51,64 @@ func (p *AnthropicProvider) Chat(ctx context.Context, messages []types.Message, 
 	}
 
 	return convertAnthropicResponse(result), nil
+}
+
+func (p *AnthropicProvider) Stream(ctx context.Context, messages []types.Message, model string, options types.ChatOptions) (*Stream, error) {
+	params, err := buildAnthropicParams(messages, model, options)
+	if err != nil {
+		return nil, fmt.Errorf("build anthropic params error: %w", err)
+	}
+	result := NewStream()
+	stream := p.client.Messages.NewStreaming(ctx, params)
+	go func() {
+		defer stream.Close()
+		if stream.Err() != nil {
+			result.errChan <- stream.Err()
+			return
+		}
+		for stream.Next() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			current := stream.Current()
+			response := types.LLMResponse{
+				FinishReason: convertAnthropicStopReason(current.Delta.StopReason),
+				Usage: &types.TokenUsage{
+					InputTokens:  current.Usage.InputTokens,
+					OutputTokens: current.Usage.OutputTokens,
+				},
+			}
+
+			toolCalls := make([]types.ToolCall, 0)
+			var content string
+
+			for _, block := range current.Message.Content {
+				switch b := block.AsAny().(type) {
+				case anthropic.TextBlock:
+					content += b.Text
+				case anthropic.ToolUseBlock:
+					argsJSON, _ := json.Marshal(b.Input)
+					toolCalls = append(toolCalls, types.ToolCall{
+						ID:   b.ID,
+						Type: "function",
+						Name: b.Name,
+						Function: &types.FunctionCall{
+							Name:      b.Name,
+							Arguments: string(argsJSON),
+						},
+					})
+				}
+			}
+
+			response.Content = content
+			response.ToolCalls = toolCalls
+			result.outChan <- response
+		}
+		result.errChan <- io.EOF
+	}()
+	return result, nil
 }
 
 func buildAnthropicParams(messages []types.Message, model string, options types.ChatOptions) (anthropic.MessageNewParams, error) {

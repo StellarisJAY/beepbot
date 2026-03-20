@@ -109,6 +109,7 @@ func main() {
 	skillRepo := repository.NewSkillRepository(db)
 	mcpRepo := repository.NewMCPServerRepository(db)
 	adminRepo := repository.NewAdminRepository(db)
+	teamRepo := repository.NewAgentTeamRepository(db)
 
 	// 初始化 JWT 密钥
 	jwtKeyFilePath := filepath.Join(".keys", ".jwt_secret")
@@ -133,6 +134,7 @@ func main() {
 	sessionService := service.NewSessionService(sessionRepo, botRepo)
 	cronService := service.NewCronService(cronRepo, agentService)
 	skillService := service.NewSkillService(skillRepo, agentRepo, cfg.DataDir)
+	teamService := service.NewTeamService(teamRepo, agentRepo, db)
 
 	// 初始化 MCP 管理器和服务
 	mcpManager := mcp.NewManager(mcpRepo)
@@ -154,7 +156,7 @@ func main() {
 	botService.SetChannelManager(channelManager)
 
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService, authService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService, authService, teamService)
 
 	// 确定 API 端口
 	port := cfg.Port

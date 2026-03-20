@@ -1,7 +1,6 @@
 package types
 
 import (
-	"context"
 	"time"
 
 	"gorm.io/datatypes"
@@ -124,8 +123,4 @@ type ChatOptions struct {
 	Reasoning   *bool
 	Tools       []ToolDefinition
 	MaxTokens   *int64
-}
-
-type LLMProvider interface {
-	Chat(ctx context.Context, messages []Message, model string, options ChatOptions) (*LLMResponse, error)
 }

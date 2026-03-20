@@ -98,6 +98,17 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'MCP 服务器' },
   },
   {
+    path: '/teams',
+    name: 'Teams',
+    component: () => import('@/views/teams/TeamList.vue'),
+    meta: { title: '团队管理' },
+  },
+  {
+    path: '/teams/:id',
+    component: () => import('@/views/teams/TeamConfig.vue'),
+    meta: { title: '团队配置' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/agents',
   },

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/StellarisJAY/beepbot/internal/channel"
+	"github.com/StellarisJAY/beepbot/internal/provider"
 	"github.com/StellarisJAY/beepbot/internal/session"
 	"github.com/StellarisJAY/beepbot/internal/skill"
 	"github.com/StellarisJAY/beepbot/internal/tool"
@@ -27,7 +29,7 @@ const (
 )
 
 type ReActAgentRunner struct {
-	model        types.LLMProvider
+	model        provider.LLMProvider
 	bus          *channel.MessageBus
 	tools        *tool.ToolRegistry
 	skillManager *skill.Manager
@@ -47,6 +49,8 @@ type ReActAgentRunner struct {
 	onContextCompression ContextCompressionHook
 	onToolUsage          ToolUsageHook
 	onLoopFinish         LoopFinishHook
+
+	streaming bool
 }
 
 type MessageRecvHook func(message channel.InboundMessage)
@@ -61,6 +65,8 @@ type LoopFinishHook func(totalIterations int, tokenUsage types.TokenUsage)
 // 输入消息来源有IM机器人、定时任务和调用sub-agent
 // 输出hook用来处理不同的消息输出逻辑，IM机器人、定时任务、sub-agent的输出逻辑有区别
 func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, message channel.InboundMessage, output OutputHook) {
+	// DEBUG STREAMING
+	a.streaming = true
 	// 处理内置命令
 	if ok := a.handleBuiltinCommand(ctx, sess, message); ok {
 		slog.Debug("handle builtin command done, skip agent loop", "command", message.Content)
@@ -146,8 +152,15 @@ func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, 
 		// 上下文
 		messages := contextBuilder.buildContext()
 
-		// 调用大模型api
-		response, err := a.model.Chat(ctx, messages, a.modelID, options)
+		// 调用模型api，流式调用会组合一个完整的消息
+		var response *types.LLMResponse
+		var err error
+		if a.streaming {
+			response, err = a.llmStream(ctx, messages, options, message)
+		} else {
+			response, err = a.llmChat(ctx, messages, options)
+		}
+
 		if err != nil {
 			slog.Error("model api error", "iteration", iterations, "error", err)
 			output.OnError(ctx, err)
@@ -372,4 +385,67 @@ func truncateText(text string, maxLen int) string {
 		return text
 	}
 	return text[:maxLen] + "...[已截断]"
+}
+
+func (a *ReActAgentRunner) llmChat(ctx context.Context, messages []types.Message, options types.ChatOptions) (*types.LLMResponse, error) {
+	// 调用大模型api
+	return a.model.Chat(ctx, messages, a.modelID, options)
+}
+
+func (a *ReActAgentRunner) llmStream(ctx context.Context, messages []types.Message, options types.ChatOptions, inboundMessage channel.InboundMessage) (*types.LLMResponse, error) {
+	stream, err := a.model.Stream(ctx, messages, a.modelID, options)
+	if err != nil {
+		return nil, err
+	}
+	fullResponse := &types.LLMResponse{
+		Usage: &types.TokenUsage{},
+	}
+	sb := strings.Builder{}
+	toolMap := make(map[string]*struct {
+		name      string
+		id        string
+		arguments *strings.Builder
+	})
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fullResponse, nil
+		case err := <-stream.Err():
+			if errors.Is(err, io.EOF) {
+				fullResponse.Content = sb.String()
+				for _, tc := range toolMap {
+					fullResponse.ToolCalls = append(fullResponse.ToolCalls, types.ToolCall{
+						ID:   tc.id,
+						Name: tc.name,
+						Type: "function",
+						Function: &types.FunctionCall{
+							Name:      tc.name,
+							Arguments: tc.arguments.String(),
+						},
+					})
+				}
+				return fullResponse, nil
+			}
+			return nil, err
+		case response := <-stream.Output():
+			if response.Content != "" {
+				slog.Info("on stream", "content", response.Content)
+				sb.WriteString(response.Content)
+			}
+			if len(response.ToolCalls) > 0 {
+				fullResponse.ToolCalls = append(fullResponse.ToolCalls, response.ToolCalls...)
+			}
+			if response.FinishReason != "" {
+				fullResponse.FinishReason = response.FinishReason
+			}
+			if response.Usage != nil {
+				fullResponse.Usage.InputTokens += response.Usage.InputTokens
+				fullResponse.Usage.OutputTokens += response.Usage.OutputTokens
+				fullResponse.Usage.CacheTokens += response.Usage.CacheTokens
+				fullResponse.Usage.ReasoningTokens += response.Usage.ReasoningTokens
+			}
+			// TODO 发送流式outbountMessage
+		}
+	}
 }

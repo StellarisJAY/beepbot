@@ -1,9 +1,5 @@
 package provider
 
-import (
-	"github.com/StellarisJAY/beepbot/internal/types"
-)
-
 // Ollama 默认 Base URL（本地 Ollama 服务）
 const OllamaDefaultBaseURL = "http://localhost:11434/v1"
 
@@ -15,7 +11,7 @@ type OllamaProvider struct {
 
 // NewOllamaProvider 创建 Ollama 提供商
 // Ollama 不需要 API Key，可以传入空字符串
-func NewOllamaProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
+func NewOllamaProvider(apiKey, baseURL, defaultModel string) LLMProvider {
 	if baseURL == "" {
 		baseURL = OllamaDefaultBaseURL
 	}

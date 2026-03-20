@@ -54,6 +54,8 @@ func InitDatabase(cfg config.DatabaseConfig, loggingConfig config.Logging) (*gor
 			&types.AgentTool{},
 			&types.MCPServer{},
 			&types.AdminUser{},
+			&types.AgentTeam{},
+			&types.AgentTeamMember{},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to migrate database: %w", err)

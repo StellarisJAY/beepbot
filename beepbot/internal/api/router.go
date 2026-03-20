@@ -37,6 +37,7 @@ func SetupRouter(
 	skillService *service.SkillService,
 	mcpService *service.MCPService,
 	authService *service.AuthService,
+	teamService *service.TeamService,
 ) *gin.Engine {
 	router := gin.Default()
 
@@ -52,6 +53,7 @@ func SetupRouter(
 	skillHandler := NewSkillHandler(skillService)
 	mcpHandler := NewMCPHandler(mcpService)
 	authHandler := NewAuthHandler(authService)
+	teamHandler := NewTeamHandler(teamService)
 
 	// API v1 路由组
 	v1 := router.Group("/api/v1")
@@ -159,6 +161,18 @@ func SetupRouter(
 				mcp.POST("/:id/test", mcpHandler.TestMCPConnection)
 				mcp.GET("/:id/tools", mcpHandler.GetMCPServerTools)
 				mcp.POST("/:id/reconnect", mcpHandler.ReconnectMCPServer)
+			}
+
+			// 团队管理
+			teams := protected.Group("/teams")
+			{
+				teams.GET("", teamHandler.ListTeams)
+				teams.GET("/:id", teamHandler.GetTeam)
+				teams.POST("", teamHandler.CreateTeam)
+				teams.PUT("/:id", teamHandler.UpdateTeam)
+				teams.DELETE("/:id", teamHandler.DeleteTeam)
+				teams.PUT("/:id/status", teamHandler.UpdateTeamStatus)
+				teams.GET("/agent/:agent_id", teamHandler.GetAgentTeams)
 			}
 		}
 	}

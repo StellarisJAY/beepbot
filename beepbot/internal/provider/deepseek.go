@@ -1,9 +1,5 @@
 package provider
 
-import (
-	"github.com/StellarisJAY/beepbot/internal/types"
-)
-
 // DeepSeek 默认 Base URL
 const DeepSeekDefaultBaseURL = "https://api.deepseek.com/v1"
 
@@ -14,7 +10,7 @@ type DeepSeekProvider struct {
 }
 
 // NewDeepSeekProvider 创建 DeepSeek 提供商
-func NewDeepSeekProvider(apiKey, baseURL, defaultModel string) types.LLMProvider {
+func NewDeepSeekProvider(apiKey, baseURL, defaultModel string) LLMProvider {
 	if baseURL == "" {
 		baseURL = DeepSeekDefaultBaseURL
 	}
