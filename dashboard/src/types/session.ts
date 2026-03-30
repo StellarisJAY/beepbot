@@ -93,3 +93,34 @@ export const PeriodOptions = [
   { value: '14d', label: '最近14天' },
   { value: '30d', label: '最近30天' },
 ]
+
+// ========== 前端聊天相关类型 ==========
+
+// SSE 事件类型
+export type ChatEventType = 'session_id' | 'message' | 'thinking' | 'tool_call' | 'tool_result' | 'tool_error' | 'error' | 'done'
+
+// SSE 事件
+export interface ChatEvent {
+  type: ChatEventType
+  content: string
+}
+
+// 聊天会话
+export interface ChatSession {
+  id: string
+  key: string
+  summary: string
+  session_type: SessionType
+  created_at: string
+  updated_at: string
+}
+
+// 聊天消息
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'tool'
+  content: string
+  tool_calls?: ToolCall[]
+  tool_call_id?: string
+  created_at: string
+}

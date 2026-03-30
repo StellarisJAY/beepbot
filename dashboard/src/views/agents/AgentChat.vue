@@ -1,270 +1,311 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, nextTick, inject, type ComputedRef } from 'vue'
 import {
   UserOutlined,
   RobotOutlined,
   SendOutlined,
-  DeleteOutlined,
+  LoadingOutlined,
+  ToolOutlined,
 } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import { chatApi } from '@/api/chat'
+import type { ChatSession, ChatMessage } from '@/types/session'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 
-// 会话列表抽屉
+// 从父组件注入（agentId 是 ComputedRef）
+const agentIdRef = inject<ComputedRef<string>>('agentId')
+
+// 获取 agentId 值
+function getAgentId(): string {
+  return agentIdRef?.value || ''
+}
+
+// 状态
+const sessions = ref<ChatSession[]>([])
+const currentSessionId = ref<string | null>(null)
+const messages = ref<ChatMessage[]>([])
+const inputValue = ref('')
+const loading = ref(false)
+const streaming = ref(false)
+const streamingContent = ref('')
 const sessionDrawerVisible = ref(false)
 
-// 暴露给父组件的方法
-const newChat = () => {
+// 消息容器引用
+const messagesContainer = ref<HTMLElement | null>(null)
+
+// 获取 token
+function getToken(): string {
+  return localStorage.getItem('beepbot_token') || ''
+}
+
+// 发送消息
+async function sendMessage(e?: KeyboardEvent) {
+  if (e) {
+    e.preventDefault() // 阻止默认换行行为
+  }
+  if (!inputValue.value.trim() || streaming.value) return
+  const id = getAgentId()
+  if (!id) {
+    message.error('智能体 ID 不存在')
+    return
+  }
+
+  const userMessage = inputValue.value.trim()
+  inputValue.value = ''
+  await nextTick()
+
+  // 添加用户消息
+  const userMsg: ChatMessage = {
+    id: `temp-${Date.now()}`,
+    role: 'user',
+    content: userMessage,
+    created_at: new Date().toISOString(),
+  }
+  messages.value.push(userMsg)
+  scrollToBottom()
+
+  streaming.value = true
+  streamingContent.value = ''
+
+  try {
+    await chatApi.chat(
+      id,
+      userMessage,
+      currentSessionId.value,
+      {
+        onSessionId: (sessionId) => {
+          currentSessionId.value = sessionId
+        },
+        onMessage: (content) => {
+          streamingContent.value += content
+          scrollToBottom()
+        },
+        onThinking: (content) => {
+          // 可以显示思考过程
+          console.log('Thinking:', content)
+        },
+        onToolCall: (toolInfo) => {
+          // 显示工具调用
+          const toolMsg: ChatMessage = {
+            id: `tool-${Date.now()}`,
+            role: 'tool',
+            content: `🔧 ${toolInfo}`,
+            created_at: new Date().toISOString(),
+          }
+          messages.value.push(toolMsg)
+          scrollToBottom()
+        },
+        onError: (error) => {
+          message.error(error)
+        },
+        onDone: () => {
+          // 保存最终消息
+          if (streamingContent.value) {
+            const assistantMsg: ChatMessage = {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: streamingContent.value,
+              created_at: new Date().toISOString(),
+            }
+            messages.value.push(assistantMsg)
+          }
+          streamingContent.value = ''
+          streaming.value = false
+          scrollToBottom()
+        },
+      },
+      getToken(),
+    )
+  } catch (error) {
+    streaming.value = false
+    message.error('发送消息失败')
+  }
+}
+
+// 新对话
+function newChat() {
+  currentSessionId.value = null
   messages.value = []
-  messages.value.push({
-    id: 'welcome',
-    role: 'assistant',
-    content: '你好！我是智能体助手，有什么可以帮助你的吗？',
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+}
+
+// 切换会话
+async function selectSession(session: ChatSession) {
+  currentSessionId.value = session.id
+  sessionDrawerVisible.value = false
+  await loadSessionMessages()
+}
+
+// 加载会话消息
+async function loadSessionMessages() {
+  if (!currentSessionId.value) return
+
+  loading.value = true
+  try {
+    const response = await chatApi.getMessages(currentSessionId.value, 50)
+    messages.value = response.messages.map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      tool_calls: msg.tool_calls,
+      tool_call_id: msg.tool_call_id,
+      created_at: msg.created_at,
+    }))
+    scrollToBottom()
+  } catch (error) {
+    message.error('加载消息失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 加载会话列表
+async function loadSessions() {
+  const id = getAgentId()
+  if (!id) return
+
+  try {
+    const response = await chatApi.getSessions(id, 1, 20)
+    sessions.value = response.data || []
+  } catch (error) {
+    console.error('加载会话列表失败:', error)
+  }
+}
+
+// 滚动到底部
+function scrollToBottom() {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
   })
 }
 
-const toggleSessionDrawer = () => {
+// 格式化时间
+function formatTime(dateStr: string) {
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// 切换会话列表抽屉
+function toggleSessionDrawer() {
   sessionDrawerVisible.value = !sessionDrawerVisible.value
 }
 
+// 暴露给父组件
 defineExpose({
   newChat,
   toggleSessionDrawer,
 })
 
-// 模拟会话列表数据
-const sessions = ref([
-  { id: '1', title: '如何使用 Go 进行并发编程', time: '2024-01-15 14:30', active: true },
-  { id: '2', title: '帮我写一个 Python 脚本', time: '2024-01-15 10:20', active: false },
-  { id: '3', title: '解释一下 React Hooks', time: '2024-01-14 16:45', active: false },
-  { id: '4', title: '数据库查询优化建议', time: '2024-01-13 09:15', active: false },
-])
-
-// 模拟消息列表
-const messages = ref([
-  {
-    id: '1',
-    role: 'user',
-    content: '你好，请帮我解释一下 Go 语言的并发模型。',
-    time: '14:30',
-  },
-  {
-    id: '2',
-    role: 'assistant',
-    content: `Go 语言的并发模型基于 **CSP (Communicating Sequential Processes)** 理论，核心概念包括：
-
-## Goroutine
-Goroutine 是 Go 中的轻量级线程，启动一个非常简单：
-\`\`\`go
-go func() {
-    // 并发执行的代码
-}()
-\`\`\`
-
-## Channel
-Channel 是 goroutine 之间通信的管道：
-\`\`\`go
-ch := make(chan int)
-go func() { ch <- 42 }()  // 发送
-value := <-ch              // 接收
-\`\`\`
-
-## Select
-Select 语句用于处理多个 channel 操作：
-\`\`\`go
-select {
-case msg := <-ch1:
-    fmt.Println("from ch1:", msg)
-case msg := <-ch2:
-    fmt.Println("from ch2:", msg)
-}
-\`\`\`
-
-这种模型提倡"**不要通过共享内存来通信，而要通过通信来共享内存**"的设计理念。`,
-    time: '14:31',
-  },
-  {
-    id: '3',
-    role: 'user',
-    content: '能给我一个完整的示例吗？',
-    time: '14:32',
-  },
-  {
-    id: '4',
-    role: 'assistant',
-    content: `当然！这是一个完整的工作池示例：
-
-\`\`\`go
-package main
-
-import (
-    "fmt"
-    "time"
-)
-
-// Worker 处理任务
-func worker(id int, jobs <-chan int, results chan<- int) {
-    for j := range jobs {
-        fmt.Printf("worker %d: started job %d\\n", id, j)
-        time.Sleep(time.Second) // 模拟耗时操作
-        fmt.Printf("worker %d: finished job %d\\n", id, j)
-        results <- j * 2
-    }
-}
-
-func main() {
-    const numJobs = 5
-    jobs := make(chan int, numJobs)
-    results := make(chan int, numJobs)
-
-    // 启动 3 个 worker
-    for w := 1; w <= 3; w++ {
-        go worker(w, jobs, results)
-    }
-
-    // 发送 5 个任务
-    for j := 1; j <= numJobs; j++ {
-        jobs <- j
-    }
-    close(jobs)
-
-    // 收集结果
-    for a := 1; a <= numJobs; a++ {
-        <-results
-    }
-}
-\`\`\`
-
-这个示例展示了：
-- 启动多个 goroutine 并发处理任务
-- 使用 channel 进行任务分发和结果收集
-- 优雅地处理并发工作流`,
-    time: '14:33',
-  },
-])
-
-// 输入框内容
-const inputValue = ref('')
-
-// 发送消息
-const sendMessage = () => {
-  if (!inputValue.value.trim()) return
-
-  messages.value.push({
-    id: Date.now().toString(),
-    role: 'user',
-    content: inputValue.value,
-    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-  })
-
-  inputValue.value = ''
-
-  setTimeout(() => {
-    messages.value.push({
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: '这是一个模拟的 AI 回复。实际功能需要连接后端服务。',
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    })
-  }, 500)
-}
-
-// 选择会话
-const selectSession = (session: { id: string }) => {
-  sessions.value.forEach((s) => (s.active = s.id === session.id))
-  sessionDrawerVisible.value = false
-}
-
-// 删除会话
-const deleteSession = (sessionId: string) => {
-  sessions.value = sessions.value.filter((s) => s.id !== sessionId)
-}
+// 初始化
+onMounted(async () => {
+  await loadSessions()
+})
 </script>
 
 <template>
   <div class="chat-container">
-    <!-- 消息区域 - 整个页面滚动 -->
+    <!-- 消息区域 -->
     <div class="messages-area">
-      <div class="messages-wrapper">
-        <div
-          v-for="message in messages"
-          :key="message.id"
-          class="message-item"
-          :class="message.role"
-        >
+      <div ref="messagesContainer" class="messages-wrapper">
+        <!-- 欢迎消息 -->
+        <div v-if="messages.length === 0 && !streaming" class="welcome-message">
+          <RobotOutlined class="welcome-icon" />
+          <p>开始与智能体对话</p>
+        </div>
+
+        <!-- 消息列表 -->
+        <div v-for="msg in messages" :key="msg.id" class="message-item" :class="msg.role">
           <div class="message-avatar">
-            <UserOutlined v-if="message.role === 'user'" />
-            <RobotOutlined v-else />
+            <UserOutlined v-if="msg.role === 'user'" />
+            <RobotOutlined v-else-if="msg.role === 'assistant'" />
+            <ToolOutlined v-else />
           </div>
           <div class="message-content">
             <div class="message-header">
               <span class="message-role">
-                {{ message.role === 'user' ? '我' : '智能体' }}
+                {{ msg.role === 'user' ? '我' : msg.role === 'assistant' ? '智能体' : '工具' }}
               </span>
-              <span class="message-time">{{ message.time }}</span>
+              <span class="message-time">{{ formatTime(msg.created_at) }}</span>
             </div>
-            <div class="message-body" v-html="message.content"></div>
+            <div class="message-body">
+              <MarkdownRenderer v-if="msg.role === 'assistant'" :content="msg.content" />
+              <template v-else>{{ msg.content }}</template>
+            </div>
+          </div>
+        </div>
+
+        <!-- 流式输出中的消息 -->
+        <div v-if="streaming && streamingContent" class="message-item assistant streaming">
+          <div class="message-avatar">
+            <RobotOutlined />
+          </div>
+          <div class="message-content">
+            <div class="message-header">
+              <span class="message-role">智能体</span>
+              <LoadingOutlined class="loading-icon" />
+            </div>
+            <div class="message-body">
+              <MarkdownRenderer :content="streamingContent" />
+            </div>
           </div>
         </div>
       </div>
-      <!-- 底部留白，给输入框腾空间 -->
-      <div class="bottom-spacer"></div>
     </div>
 
-    <!-- 输入区域 - 固定悬浮在底部 -->
+    <!-- 输入区域 -->
     <div class="input-area">
       <div class="input-container">
         <div class="input-box">
           <a-textarea
             v-model:value="inputValue"
-            placeholder="输入消息进行调试..."
+            placeholder="输入消息..."
             :auto-size="{ minRows: 1, maxRows: 4 }"
+            :disabled="streaming"
             @press-enter="sendMessage"
           />
-          <a-button type="primary" class="send-btn" @click="sendMessage">
+          <a-button
+            type="primary"
+            class="send-btn"
+            :loading="streaming"
+            :disabled="!inputValue.trim()"
+            @click="sendMessage"
+          >
             <template #icon><SendOutlined /></template>
           </a-button>
         </div>
-        <div class="input-hint">
-          按 Enter 发送，Shift + Enter 换行
-        </div>
+        <div class="input-hint">按 Enter 发送，Shift + Enter 换行</div>
       </div>
     </div>
 
     <!-- 会话列表抽屉 -->
-    <div class="session-drawer" :class="{ visible: sessionDrawerVisible }">
-      <div class="drawer-header">
-        <span>历史会话</span>
-      </div>
-      <div class="drawer-body">
-        <div
-          v-for="session in sessions"
-          :key="session.id"
-          class="session-item"
-          :class="{ active: session.active }"
-          @click="selectSession(session)"
-        >
-          <div class="session-info">
-            <div class="session-title">{{ session.title }}</div>
-            <div class="session-time">{{ session.time }}</div>
+    <a-drawer
+      v-model:open="sessionDrawerVisible"
+      title="历史会话"
+      placement="right"
+      :width="320"
+    >
+      <div v-if="sessions.length === 0" class="empty-sessions">暂无历史会话</div>
+      <div
+        v-for="session in sessions"
+        :key="session.id"
+        class="session-item"
+        :class="{ active: session.id === currentSessionId }"
+        @click="selectSession(session)"
+      >
+        <div class="session-info">
+          <div class="session-title">
+            {{ session.summary || '新对话' }}
           </div>
-          <a-button
-            type="text"
-            size="small"
-            danger
-            class="delete-btn"
-            @click.stop="deleteSession(session.id)"
-          >
-            <template #icon><DeleteOutlined /></template>
-          </a-button>
+          <div class="session-time">{{ formatTime(session.updated_at) }}</div>
         </div>
       </div>
-    </div>
-
-    <!-- 抽屉遮罩 -->
-    <div
-      v-if="sessionDrawerVisible"
-      class="drawer-mask"
-      @click="sessionDrawerVisible = false"
-    ></div>
+    </a-drawer>
   </div>
 </template>
 
@@ -272,21 +313,32 @@ const deleteSession = (sessionId: string) => {
 .chat-container {
   height: 100%;
   display: flex;
-  position: relative;
   overflow: hidden;
+  flex-direction: column;
 }
 
-/* 消息区域 - 整个页面滚动 */
 .messages-area {
   flex: 1;
+  height: 85%;
   overflow-y: auto;
   padding: 20px;
-  padding-bottom: 0;
+  padding-bottom: 120px;
 }
 
 .messages-wrapper {
   max-width: 800px;
   margin: 0 auto;
+}
+
+.welcome-message {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.welcome-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
 }
 
 .message-item {
@@ -317,6 +369,11 @@ const deleteSession = (sessionId: string) => {
 
 .message-item.assistant .message-avatar {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.message-item.tool .message-avatar {
+  background: #faad14;
   color: #fff;
 }
 
@@ -367,26 +424,29 @@ const deleteSession = (sessionId: string) => {
   border: 1px solid var(--border-color);
 }
 
-/* 底部留白 */
-.bottom-spacer {
-  height: 100px;
+.message-item.tool .message-body {
+  background: #fffbe6;
+  color: #595959;
+  border-bottom-left-radius: 4px;
+  border: 1px solid #ffe58f;
+  font-size: 13px;
 }
 
-/* 输入区域 - 固定悬浮在底部 */
+.loading-icon {
+  color: var(--color-primary);
+}
+
 .input-area {
-  position: absolute;
-  left: 0;
-  right: 320px;
-  bottom: 0;
-  padding: 16px 20px 20px;
-  background: linear-gradient(to top, var(--bg-color) 80%, transparent);
-  pointer-events: none;
-  transition: right 0.3s ease;
+  display: flex;
+  justify-content: center;
+  padding: 0 20px;
+  z-index: 100;
+  height: 200px;
 }
 
 .input-container {
+  width: 100%;
   max-width: 800px;
-  margin: 0 auto;
   pointer-events: auto;
 }
 
@@ -394,7 +454,7 @@ const deleteSession = (sessionId: string) => {
   display: flex;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--border-color);
@@ -418,6 +478,17 @@ const deleteSession = (sessionId: string) => {
   box-shadow: none !important;
 }
 
+/* 禁用状态下保持透明白色背景 */
+.input-box :deep(.ant-input-disabled) {
+  background: transparent !important;
+  color: var(--text-color) !important;
+}
+
+.input-box :deep(.ant-input[disabled]) {
+  background: transparent !important;
+  color: var(--text-color) !important;
+}
+
 .send-btn {
   flex-shrink: 0;
   width: 40px;
@@ -435,42 +506,11 @@ const deleteSession = (sessionId: string) => {
   text-align: center;
 }
 
-/* 会话列表抽屉 */
-.session-drawer {
-  position: absolute;
-  right: -320px;
-  top: 0;
-  bottom: 0;
-  width: 320px;
-  background: var(--card-bg);
-  border-left: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  transition: right 0.3s ease;
-  z-index: 10;
-}
-
-.session-drawer.visible {
-  right: 0;
-}
-
-.drawer-header {
-  flex-shrink: 0;
-  height: 56px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-color);
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.drawer-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
+/* 会话列表样式 */
+.empty-sessions {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
 }
 
 .session-item {
@@ -511,23 +551,18 @@ const deleteSession = (sessionId: string) => {
   color: var(--text-secondary);
 }
 
-.delete-btn {
-  opacity: 0;
-  transition: opacity 0.2s;
+/* 深色模式适配 */
+:global(.dark) .message-item.assistant .message-body {
+  background: var(--component-bg, #1f1f1f);
+  border-color: var(--border-color, #303030);
 }
 
-.session-item:hover .delete-btn {
-  opacity: 1;
+:global(.dark) .message-item.tool .message-body {
+  background: #2b2111;
+  border-color: #594214;
 }
 
-/* 抽屉遮罩 */
-.drawer-mask {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  right: 320px;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 5;
+:global(.dark) .input-box {
+  background: rgba(30, 30, 30, 0.95);
 }
 </style>

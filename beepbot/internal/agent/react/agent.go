@@ -156,7 +156,7 @@ func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, 
 		var response *types.LLMResponse
 		var err error
 		if a.streaming {
-			response, err = a.llmStream(ctx, messages, options, message)
+			response, err = a.llmStream(ctx, messages, options, output)
 		} else {
 			response, err = a.llmChat(ctx, messages, options)
 		}
@@ -186,7 +186,9 @@ func (a *ReActAgentRunner) AgentLoop(ctx context.Context, sess session.Session, 
 			break
 		}
 
-		if response.Content != "" {
+		// 非流式模式下，发送中间内容（工具调用前的思考内容）
+		// 流式模式下，内容已在 llmStream 中发送
+		if response.Content != "" && !a.streaming {
 			output.OnIntermediateContent(ctx, response.Content)
 		}
 
@@ -392,7 +394,7 @@ func (a *ReActAgentRunner) llmChat(ctx context.Context, messages []types.Message
 	return a.model.Chat(ctx, messages, a.modelID, options)
 }
 
-func (a *ReActAgentRunner) llmStream(ctx context.Context, messages []types.Message, options types.ChatOptions, inboundMessage channel.InboundMessage) (*types.LLMResponse, error) {
+func (a *ReActAgentRunner) llmStream(ctx context.Context, messages []types.Message, options types.ChatOptions, output OutputHook) (*types.LLMResponse, error) {
 	stream, err := a.model.Stream(ctx, messages, a.modelID, options)
 	if err != nil {
 		return nil, err
@@ -432,6 +434,8 @@ func (a *ReActAgentRunner) llmStream(ctx context.Context, messages []types.Messa
 			if response.Content != "" {
 				slog.Info("on stream", "content", response.Content)
 				sb.WriteString(response.Content)
+				// 流式输出内容
+				output.OnIntermediateContent(ctx, response.Content)
 			}
 			if len(response.ToolCalls) > 0 {
 				fullResponse.ToolCalls = append(fullResponse.ToolCalls, response.ToolCalls...)
@@ -445,7 +449,6 @@ func (a *ReActAgentRunner) llmStream(ctx context.Context, messages []types.Messa
 				fullResponse.Usage.CacheTokens += response.Usage.CacheTokens
 				fullResponse.Usage.ReasoningTokens += response.Usage.ReasoningTokens
 			}
-			// TODO 发送流式outbountMessage
 		}
 	}
 }

@@ -38,6 +38,7 @@ func SetupRouter(
 	mcpService *service.MCPService,
 	authService *service.AuthService,
 	teamService *service.TeamService,
+	chatHandler *ChatHandler,
 ) *gin.Engine {
 	router := gin.Default()
 
@@ -173,6 +174,14 @@ func SetupRouter(
 				teams.DELETE("/:id", teamHandler.DeleteTeam)
 				teams.PUT("/:id/status", teamHandler.UpdateTeamStatus)
 				teams.GET("/agent/:agent_id", teamHandler.GetAgentTeams)
+			}
+
+			// 前端聊天接口（agentID 在请求体中）
+			chat := protected.Group("/chat")
+			{
+				chat.POST("", chatHandler.Chat)                  // 流式聊天
+				chat.POST("/sessions", chatHandler.GetSessions)  // 会话列表
+				chat.POST("/messages", chatHandler.GetMessages)  // 会话消息
 			}
 		}
 	}

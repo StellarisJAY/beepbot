@@ -7,4 +7,7 @@ const (
 
 	// ChannelCron 定时任务渠道
 	ChannelCron = "cron"
+
+	// ChannelWeb 前端聊天渠道
+	ChannelWeb = "web"
 )

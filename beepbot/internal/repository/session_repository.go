@@ -26,6 +26,9 @@ type SessionRepository interface {
 	// GetSessionsByAgentID 根据智能体ID分页查询会话列表（支持筛选）
 	GetSessionsByAgentID(agentID string, page, pageSize int, query *types.SessionQuery) ([]types.Session, int64, error)
 
+	// GetWebChatSessions 获取前端聊天会话列表
+	GetWebChatSessions(agentID, userID string, page, pageSize int) ([]types.Session, int64, error)
+
 	// GetSessionStats 批量获取会话统计信息（消息数量和token用量）
 	GetSessionStats(sessionIDs []string) (map[string]SessionStats, error)
 
@@ -351,4 +354,35 @@ func (r *SessionRepositoryImpl) EvictMessagesInWindow(sessionID string) error {
 	return r.db.Model(&types.SessionMessage{}).
 		Where("session_id = ?", sessionID).
 		Update("in_window", false).Error
+}
+
+// GetWebChatSessions 获取前端聊天会话列表
+// 查询条件：agentID + sessionType=chat + botID=web + userID（通过 im_context）
+func (r *SessionRepositoryImpl) GetWebChatSessions(agentID, userID string, page, pageSize int) ([]types.Session, int64, error) {
+	var sessions []types.Session
+	var total int64
+
+	offset := (page - 1) * pageSize
+
+	// 查询条件：
+	// - agent_id = ?
+	// - session_type = 'chat'
+	// - bot_id = 'web'
+	// - im_context->>'user_id' = ?
+	query := r.db.Model(&types.Session{}).
+		Where("agent_id = ? AND session_type = ? AND bot_id = ?", agentID, types.SessionTypeChat, "web").
+		Where("im_context->>'user_id' = ?", userID)
+
+	// 统计总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询，按更新时间倒序
+	err := query.Order("updated_at DESC").
+		Offset(offset).
+		Limit(pageSize).
+		Find(&sessions).Error
+
+	return sessions, total, err
 }

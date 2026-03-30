@@ -141,7 +141,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="detail-layout">
+  <div class="detail-layout"> 
     <!-- 左侧导航栏 - 固定不变 -->
     <div class="side-nav">
       <!-- 上部分：基本信息 -->
@@ -233,7 +233,7 @@ onMounted(() => {
       </div>
 
       <!-- 内容区域 -->
-      <div class="content-body" :class="{ 'no-scroll': currentRoute === 'chat' }">
+      <div class="content-body">
         <a-spin :spinning="loading">
           <router-view v-slot="{ Component }">
             <component :is="Component" ref="componentRef" />
@@ -272,6 +272,7 @@ onMounted(() => {
 <style scoped>
 .detail-layout {
   height: 100%;
+  min-height: 0;
   display: flex;
   overflow: hidden;
   background: var(--bg-color);
@@ -379,6 +380,7 @@ onMounted(() => {
 /* 中间区域 */
 .main-area {
   flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -411,7 +413,13 @@ onMounted(() => {
 /* 内容区域 - 可滚动 */
 .content-body {
   flex: 1;
+  height: 100%;
   overflow-y: auto;
+}
+
+.content-body :deep(.ant-spin-nested-loading),
+.content-body :deep(.ant-spin-container) {
+  height: 100%;
 }
 
 .content-body.no-scroll {

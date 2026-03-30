@@ -155,8 +155,31 @@ func main() {
 	// 将 ChannelManager 注入到 BotService
 	botService.SetChannelManager(channelManager)
 
+	// 创建 CronToolDeps 用于定时任务工具
+	cronDeps := &tool.CronToolDeps{
+		CronRepo:   cronRepo,
+		Scheduler:  nil, // 稍后设置
+		Validator:  tool.DefaultCronValidator(),
+		AgentCheck: func(agentID string) bool { return true },
+	}
+
+	// 创建 ChatHandler
+	chatHandler := api.NewChatHandler(
+		agentService,
+		sessionService,
+		agentRepo,
+		providerRepo,
+		sessionRepo,
+		skillRepo,
+		encryptor,
+		*cfg,
+		cronDeps,
+		mcpManager,
+		messageBus,
+	)
+
 	// 设置 API 路由
-	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService, authService, teamService)
+	router := api.SetupRouter(providerService, agentService, botService, sessionService, cronService, skillService, mcpService, authService, teamService, chatHandler)
 
 	// 确定 API 端口
 	port := cfg.Port
@@ -193,13 +216,8 @@ func main() {
 		}
 	}()
 
-	// 创建 CronToolDeps 用于定时任务工具
-	cronDeps := &tool.CronToolDeps{
-		CronRepo:   cronRepo,
-		Scheduler:  cronScheduler,
-		Validator:  tool.DefaultCronValidator(),
-		AgentCheck: func(agentID string) bool { return true }, // 简单验证，实际由工具内部处理
-	}
+	// 更新 CronToolDeps 的 Scheduler
+	cronDeps.Scheduler = cronScheduler
 
 	// 启动 AgentManager 消息循环
 	agentManager := service.NewAgentManager(*cfg, db, agentRepo, botRepo, providerRepo, messageBus, encryptor, cronDeps, mcpManager)
